@@ -29,9 +29,13 @@ def open_button():
     if path_open:
         with open(str(path_open),'r') as reader:
             path_temp = reader.readline()
+            path_temp = path_temp.replace('\n','')
             path_level = reader.readline()
+            path_level = path_level.replace('\n','')
             path_meteo = reader.readline()
+            path_meteo = path_meteo.replace('\n','')
             path_senso = reader.readline()
+            path_senso = path_senso.replace('\n','')
             height_wind.delete(0,'end')
             height_wind.insert(END,float(reader.readline()))
             contri_wind_var.set(float(reader.readline()))
@@ -43,6 +47,7 @@ def open_button():
                 vari_len.insert(END,float(reader.readline())) 
             elif int(typechoose.get()) == 2:
                 path_fetch = reader.readline()
+                path_fetch = path_fetch.replace('\n','')
             meta.delete(0,'end')
             meta.insert(END,float(reader.readline())) 
             filterchoose.set(int(reader.readline()))
@@ -177,12 +182,12 @@ def save_settings(temporary):
 
 
     if temporary == 'temporary':
-        data_file = 'temporary.txt'  
-        space     =  '\n'
-    else:
+        data_file = 'temporary.txt' 
+        space     = '\n'
+    else:   
         f = filedialog.asksaveasfile(defaultextension=".set")
         data_file = str(f.name)
-        space     =  ''
+        space     =  '\n'
 
     with open(data_file, 'w') as data:
 
