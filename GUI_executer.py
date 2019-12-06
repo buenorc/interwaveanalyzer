@@ -19,8 +19,6 @@ from tkinter import filedialog
 from tkinter import simpledialog
 from tkinter import ttk
 
-import bueno_iwm as iwm
-
 def open_button():
     global path_open, path_temp, path_level, path_meteo, path_senso, path_fetch, folder_path
     path_open = askopenfilename(defaultextension='.set', filetypes=[('SET files','*.set')])
@@ -275,6 +273,7 @@ class StdRedirector():
        
 def export_data():
     
+    import bueno_iwm as iwm
     save_settings('temporary')  
     iwm.main()
     
@@ -414,7 +413,7 @@ def selected_isod():
 
 def selected_sensor():
     global sensor_type
-    senor_type = int(sensor_button.get())
+    sensor_type = int(sensor_button.get())
 
     if int(sensor_button.get())==0:
         sen1.config(state='disable')
@@ -568,7 +567,7 @@ Button(tab1,text='Open File',command=senso_function).grid(row=13,column=1,pady=4
 
 Label(tab2,anchor="w",font="Verdana 8 bold", text="Density structure",width=50).grid(row=1,column=0,sticky='w',pady=8)
 
-Label(tab2, text="Metalimnion threshold (meters):").grid(row=2,column=0,sticky='w',pady=4)
+Label(tab2, text="Metalimnion threshold (kg/m³/m):").grid(row=2,column=0,sticky='w',pady=4)
 meta = Entry(tab2, bd =3)
 meta.insert(END,0.1)
 meta.grid(row=2,column=1,pady=4)

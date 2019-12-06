@@ -10,14 +10,14 @@ import math as ma
 import numpy as np 
 import matplotlib.dates as mdates
 import matplotlib.ticker as ticker
-import matplotlib.patches as patches
 import matplotlib.patches as mpatches
 
 from windrose import WindroseAxes
-from scipy.interpolate import spline
+from scipy.interpolate import BSpline
 from matplotlib import pyplot as plt
 from internal_module import interpol
 from matplotlib.ticker import FormatStrFormatter
+
 
 # ---------------equations for degeneration of internal waves------------------
 
@@ -79,7 +79,7 @@ def model_plot(freq_mode,col,typ,vert,hori,maxima,ax):
     
     maxima = maxima*10000
     delta  = freq_mode[0] - freq_mode[2]
-    rec = patches.Rectangle((0.0, freq_mode[2]), maxima, delta, color=col,alpha=0.5)
+    rec = mpatches.Rectangle((0.0, freq_mode[2]), maxima, delta, color=col,alpha=0.5)
     
     ax.add_patch(rec)
     
@@ -106,6 +106,7 @@ def smooth(y, box_pts):
     y_smooth = np.convolve(y, box, mode='same')
     return y_smooth
 
+
 def smooth_date(t,dt,y,limite=600):
     #
     # t  = timedate form 
@@ -117,7 +118,7 @@ def smooth_date(t,dt,y,limite=600):
     t_sm = np.array(dt)
     t_smooth = np.linspace(np.min(t_sm), np.max(t_sm), limite)
     index = value_nearest_vector(t_sm,t_smooth,limite)
-    y_smooth = spline(dt, y, t_smooth)
+    y_smooth = np.interp(t_smooth, dt, y)
     
     for x in range(limite):
         new_date[x] = t[int(index[x])]
@@ -273,11 +274,13 @@ def isodepth(date,t,y,color,depth,ax):
 def multi_isotherms(date, y, iso, time,ax):
  
     color  = ['deepskyblue','dodgerblue','royalblue','darkblue']
-    
+
     for i in range(4):
         if iso[i]!=-999:
-            t_smooth, t_numeral, y_smooth = smooth_date(date,time[i],y[i],len(y[i]))  
-            ax.plot(t_smooth, y_smooth, linewidth=1, c=color[i], ls='-', label = 'iso '+str(iso[i])+'°C')
+
+            #t_smooth, t_numeral, y_smooth = smooth_date(date,time[i],y[i],len(y[i]))  
+            #ax.plot(t_smooth, y_smooth, linewidth=1, c=color[i], ls='-', label = 'iso '+str(iso[i])+'°C')
+            ax.plot(date, y[i], linewidth=1, c=color[i], ls='-', label = 'iso '+str(iso[i])+'°C')
            
     ax.set_xticklabels(date, rotation=25)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
@@ -295,7 +298,10 @@ def temp_bandpass(date, y, iso, ax):
     
     for i in range(4):
         if iso[i]!=-999:
-            ax.plot(date, y[i], linewidth=1, c=color[i], ls='-', label='iso '+str(iso[i])+'°C')
+            try:
+                ax.plot(date, y[i], linewidth=1, c=color[i], ls='-', label='iso '+str(iso[i])+'°C')
+            except ValueError:
+                pass
 
     ax.set_xticklabels(date, rotation=25)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
@@ -317,17 +323,18 @@ def wind_rose(ws,wd):
     ax.bar(wd, ws, normed=True, opening=0.8, edgecolor='white', bins=bins_range)
     ax.set_legend(fontsize=15)
 
-def depth_bandpass(date, y, depth, time,s,ax):
+def depth_bandpass(date, y, depth, time,s, ax):
     
    
     color = ['red','maroon','blue','navy']
     
     for i in range(4):
         if(s[i] == 1):
-            ide = np.nanmean(depth[i])
-            ax.plot(date, y[i], linewidth=1, c=color[i], ls='-', label=str(round(ide,0))+' m')
-
-           
+            try:
+                ide = np.nanmean(depth[i])
+                ax.plot(date, y[i], linewidth=1, c=color[i], ls='-', label=str(round(ide,0))+' m')
+            except ValueError:
+                pass  
     ax.set_xticklabels(date, rotation=25)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
 
@@ -350,9 +357,10 @@ def thermal_variation(date,depth, depth_point, temp, time, zoom, ax):
     # this does not account the surface elevation 
     points = len(time)
     
-    t_smooth, t_numeral, y_smooth = smooth_date(date,time,temp,points)  
-    ax.plot(t_smooth, y_smooth, linewidth=1, c='black', ls='-')
-     
+    #t_smooth, t_numeral, y_smooth = smooth_date(date,time,temp,points)  
+    #ax.plot(t_smooth, y_smooth, linewidth=1, c='black', ls='-')
+    ax.plot(date, temp, linewidth=1, c='black', ls='-')
+    
     col = ['red','maroon','blue','navy']
     for i in range(4):  
         aux = depth[i]
@@ -360,8 +368,9 @@ def thermal_variation(date,depth, depth_point, temp, time, zoom, ax):
             
             d = vector_time (temp,depth_point[i],points)
 
-            t_smooth, t_numeral, y_smooth = smooth_date(date,time,d,points)  
-            ax.plot(t_smooth, y_smooth, linewidth=1, c=col[i], ls='-', label=str(round(np.nanmean(depth[i]),1))+' m') 
+            #t_smooth, t_numeral, y_smooth = smooth_date(date,time,d,points)  
+            #ax.plot(t_smooth, y_smooth, linewidth=1, c=col[i], ls='-', label=str(round(np.nanmean(depth[i]),1))+' m') 
+            ax.plot(date, d, linewidth=1, c=col[i], ls='-', label=str(round(np.nanmean(depth[i]),1))+' m') 
       
     
     ax.grid(True,which="both",color='black',ls=":",lw=0.25)
@@ -685,7 +694,11 @@ def coherence_iso(t,coh,fre,ana1, ana2, ax):
     for i in range(4):
         for j in range(4):
             if (i!=j and j>i):
-                if(ana1 == (i+1)*(j+1) or ana2 == (i+1)*(j+1)):
+                a1 = np.around(float(ana1)/10,0)
+                b1 = ana1 - 10*a1
+                a2 = np.around(float(ana2)/10,0)
+                b2 = ana2 - 10*a2
+                if((a1 == i+1 and b1 == j+1) or (a2 == i+1 and b2 == j+1)):
                     if(t[i]!=-999 and t[j]!=-999):
                         k = code_index((i+1)*(j+1))
                         ax.plot(1/fre[k],coh[k],linewidth=1, color=c[k], label=str(t[i])+'/'+str(t[j])+'°C')
@@ -719,7 +732,11 @@ def phase_iso(t, ph, fre, conf, ana1,ana2, ax):
     for i in range(4):
         for j in range(4):
             if (i!=j and j>i):
-                if(ana1 == (i+1)*(j+1) or ana2 == (i+1)*(j+1)):
+                a1 = np.around(float(ana1)/10,0)
+                b1 = ana1 - 10*a1
+                a2 = np.around(float(ana2)/10,0)
+                b2 = ana2 - 10*a2
+                if((a1 == i+1 and b1 == j+1) or (a2 == i+1 and b2 == j+1)):
                     if(t[i]!=-999 and t[j]!=-999):
                         k = code_index((i+1)*(j+1))
                         f = fre[k]
@@ -751,7 +768,7 @@ def phase_depth(matrix_depth,conf, ph,fr,ax):
             f=fr[i]
             p=ph[i]
 
-            ax.plot(1/f[conf[i]],abs(p[conf[i]]),linewidth=1, color=c[i], label=str(round(depth1,1))+'/'+str(round(depth2,1))+' m')
+            ax.scatter(1/f[conf[i]],abs(p[conf[i]]),linewidth=1, marker='o', color=c[i], label=str(round(depth1,1))+'/'+str(round(depth2,1))+' m')
                     
     ax.set_ylabel('Phase (degrees)', color='black')
     ax.set_yticks([ 0, np.pi/2, np.pi])
@@ -887,8 +904,11 @@ def ri_compb(dx,time,ri,rid,dw,up,ax):
 
 
 def richardson2d(dx,time,h,ri,thermo,cota,ax):
-    
-    x = ax.contourf(dx, h, ri.transpose(), 100,locator=ticker.LogLocator())
+
+    # lev_exp = np.arange(np.floor(np.log10(z.min())-1),np.ceil(np.log10(z.max())+1))
+
+# cs = ax.contourf(X, Y, z, levs, norm=colors.LogNorm())
+    x = ax.contourf(dx, h, ri.transpose(), 100, locator=ticker.LogLocator())
     ax.plot(dx, thermo, linewidth=1, c='red', ls='-')
     ax.plot(dx, cota, linewidth=1, c='blue', ls='-')
 
@@ -955,8 +975,6 @@ def degeneration(p1,p2,p3,xa,xb,xc,ya,yb,yc,pe,ph,dh,H,ls,ax):
     y2 = equation_two (H, xl)
     y3 = equation_three (H, xl, meta)
     
-    
-    
     ax.plot(xl, y1, linewidth=1, c='blue', ls='-' )  
     ax.plot(xl, y2, linewidth=1, c='black', ls='-' )
     ax.plot(xl, y3, linewidth=1, c='red', ls='-' )
@@ -989,7 +1007,108 @@ def degeneration(p1,p2,p3,xa,xb,xc,ya,yb,yc,pe,ph,dh,H,ls,ax):
     
     ax.set_xlim([0.1,0.5])
     ax.set_ylim([0.0,2.0])
- 
+
+def movingaverage(interval, window_size):
+    
+    window = np.ones(int(window_size))/float(window_size)
+    return np.convolve(interval, window, 'same')
+   
+def degeneration_evolution(p1,p2,p3,x,y,pe,ph,dh,H,ls,zoom,ax):
+              # matalimnion thickness
+    
+    rhoe = pe
+    rhoh = ph
+    L    = ls
+    
+    Hdh  =  7.00
+    dhe  = H/Hdh
+    
+    meta = dhe
+        
+    # boundaries lines
+    xl = np.arange(0.01, 0.501, 0.001) 
+    y1 = equation_one (H, xl, rhoe, rhoh, L, meta)
+    y2 = equation_two (H, xl)
+    y3 = equation_three (H, xl, meta)
+    
+    ax.plot([0.1,0.5],[1/12,1/12],   linewidth=1,   c='deepskyblue', ls='--' )
+    ax.plot([0.1,0.5],[1/3,1/3],     linewidth=1,   c='deepskyblue', ls='--' )
+    ax.plot([0.1,0.5],[1/1,1/1],     linewidth=1,   c='deepskyblue', ls='--' )
+    ax.plot([0.1,0.5],[1/0.8,1/0.8], linewidth=1,   c='deepskyblue', ls='--' )
+    
+    ax.plot(xl, y1, linewidth=1, c='blue', ls='-' )
+    ax.plot(xl, y2, linewidth=1, c='black', ls='-' )
+    ax.plot(xl, y3, linewidth=1, c='red', ls='-' )
+
+
+    window_size = len(x[0])/10
+    
+
+    ya_moved = movingaverage(y[0], window_size)
+    yb_moved = movingaverage(y[1], window_size)
+    yc_moved = movingaverage(y[2], window_size)
+    
+    xa_moved = movingaverage(x[0], window_size)
+    xb_moved = movingaverage(x[1], window_size)
+    xc_moved = movingaverage(x[2], window_size)
+    
+        
+    while (all(ya_moved) == None and all(yb_moved) == None and all(yc_moved)== None) or (window_size == 0):
+            
+            ya_moved = movingaverage(y[0], window_size)
+            yb_moved = movingaverage(y[1], window_size)
+            yc_moved = movingaverage(y[2], window_size)  
+            
+            window_size = window_size - 1 
+            
+                                
+
+    ax.scatter(xa_moved,ya_moved,marker='o', s=1, color='red', linewidths=1, label='P1')
+    ax.scatter(xb_moved,yb_moved,marker='o', s=1, color='navy', linewidths=1, label='P2')
+    ax.scatter(xc_moved,yc_moved,marker='o', s=1, color='green', linewidths=1, label='P3')
+    
+    
+    ax.legend(loc='upper right',prop={'size': 9})
+    
+    ax.set_xlabel(r'$h_e/H$') 
+    
+
+    
+    minix = min(np.nanmin(xa_moved),np.nanmin(xb_moved),np.nanmin(xc_moved))-0.05
+    if(minix < 0.1):
+        minix = 0.1
+    maxix = max(np.nanmax(xa_moved),np.nanmax(xb_moved),np.nanmax(xc_moved))+0.05
+    if(maxix > 0.5):
+        maxix = 0.5
+    miniy = min(np.nanmin(ya_moved),np.nanmin(yb_moved),np.nanmin(yc_moved))-0.05
+    if(miniy <0):
+        miniy=0
+    maxiy = max(np.nanmax(ya_moved),np.nanmax(yb_moved),np.nanmax(yc_moved))+0.05
+    if(maxiy >2):
+        maxiy=2    
+    
+    if (zoom == 'no'):
+        
+        yd =  (maxiy-miniy)
+        xd =  (maxix-minix)
+
+        rect = mpatches.Rectangle( (minix,miniy),xd,yd,linewidth=1, linestyle = '--',fill=None, alpha=1)
+        ax.add_patch(rect)
+        
+        ax.set_ylabel('1/W')
+        ax.set_xlim([0.1,0.5])
+        ax.set_ylim([0.0,2.0])
+        
+        
+    else:
+
+        if window_size ==0: 
+            ax.set_xlim([0.1,0.5])
+            ax.set_ylim([0.0,2.0])
+        else:
+            ax.set_xlim([minix,maxix])
+            ax.set_ylim([miniy,maxiy])        
+  
     
 def generation(cla,ax):
 

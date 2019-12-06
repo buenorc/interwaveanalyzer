@@ -21,7 +21,7 @@ import math
 
 def comparison_definition(c):
 
-    comparison = ["None", "Iso. 1-2", "Iso. 1-3", "Iso. 1-4", "Iso. 2-3", "Iso. 2-4", "Iso. 3-4"]
+    comparison = ["None\n", "Iso. 1-2\n", "Iso. 1-3\n", "Iso. 1-4\n", "Iso. 2-3\n", "Iso. 2-4\n", "Iso. 3-4\n"]
         
     if c == comparison[0]:
         c = -999
@@ -150,8 +150,13 @@ def ci(x):
     z       = 1.96
     
     dev = val*z
-    upper = np.nanmean(x) + dev 
-    lower = np.nanmean(x) - dev 
+    
+    try:
+        upper = np.nanmean(x) + dev 
+        lower = np.nanmean(x) - dev 
+    except RuntimeWarning:
+        upper = None
+        lower = None
     
     return lower,upper
 
@@ -180,13 +185,14 @@ def velocityten(wz,z):
     w10  = np.zeros(l,float)
        
     for t in range(l):
-        Cd = 1.3*10**-3
-        wind  = wz[t]*(1-math.sqrt(Cd)*exp/k)**-1
         
-        if wind >= 5.0 :
+       Cd = 1.3*10**-3
+       wind  = wz[t]*(1-math.sqrt(Cd)*exp/k)**-1
+        
+       if wind >= 5.0 :
             Cd = 1.5*10**-3 
             w10[t]  = wz[t]*(1-math.sqrt(Cd)*exp/k)**-1
-        else:
+       else:
             Cd  = 1.0*10**-3 #drag coefficient
             w10[t]  = wz[t]*(1-math.sqrt(Cd)*exp/k)**-1
     
@@ -534,7 +540,11 @@ def density_3layer (qt,h,tau,sal,pre,minval,H):
                    np3  =  np3 +  1           
                    
         p1 = p1/np1
-        p3 = p3/np3
+
+        if np3 == 0:
+            p3 = p2
+        else:
+            p3 = p3/np3
         
         if np2 == 0:
             p2 = (p1+p3)/2
@@ -712,7 +722,10 @@ def nonwind_para2d(qt,h,H,tau,sal,pre):
         hmid[z]   =  media(h[z],h[z+1]) 
     
         glin      = abs(9.81*(p[z+1]-p[z])/p[z+1])
-        n2d[z]    = math.sqrt(glin/(h[z]-h[z+1]))
+        if(h[z] != h[z+1]):
+            n2d[z]    = math.sqrt(glin/(h[z]-h[z+1]))
+        else:
+            n2d[z]    = math.sqrt(glin/0.01)
     
     # output:
     #
@@ -872,6 +885,7 @@ def class_generation (riw,hh,he,ls):
     #    3 = Internal seiche is dominant
     #    4 = Internal seiche with short amplitude.
     #
+
     aux1 = math.sqrt((hh+he)/he)
     
     if riw < 1:
@@ -945,7 +959,7 @@ def wave_spectral (si, dt, mother):
     # ---------------------  wavelet parameters -------------------------------
  
     pad = 1            # pad the time series with zeroes (recommended)
-    dj = 0.25          # this will do 4 sub-octaves per octave
+    dj = 0.10          # this will do 10 sub-octaves per octave
     s0 = 4.*dt         # this says start at a scale of 1 hour
     j1 = 7./dj         # this says do 7 powers-of-two with dj sub-octaves each
    
@@ -989,11 +1003,10 @@ def coherence_shift(s1,s2,nfft,dt):
 
 
 
-def butter_bandpass(lendata, lowcut, highcut, dt, order):
+def butter_bandpass(lowcut, highcut, fs, order):
     
-    fs  = 1/dt     # 1/hour
-    nyq = fs/2
-
+    nyq = 0.5*fs
+    
     low  = lowcut/nyq
     high = highcut / nyq
     
@@ -1003,13 +1016,13 @@ def butter_bandpass(lendata, lowcut, highcut, dt, order):
     return b, a
 
 
-def butter_bandpass_filter(data, lowcut, highcut, dt, alpha, order):
+
+
+def butter_bandpass_filter(data, lowcut, highcut, fs,  order):
+
     
-    lendata=len(data)
-    
-    b, a   = butter_bandpass(lendata, lowcut, highcut, dt, order=order)
-    window = signal.tukey(len(signal.lfilter(b, a, data)),alpha)
-    f = signal.lfilter(b, a, data)*window
+    b, a   = butter_bandpass( lowcut, highcut, fs, order=order)
+    f = signal.lfilter(b, a, data)
     
     return f
 

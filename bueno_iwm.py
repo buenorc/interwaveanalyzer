@@ -202,6 +202,7 @@ def main():
     ean, h, tempa           = load.serial_cota(serialt,nac,lin,qt,temp,sen_nam)
     wind, dw, ra            = load.serial_wind(serialt,win,lin)
 
+    
     if type_length == 1: 
         dists = len_basin 
     elif type_length == 2:
@@ -418,6 +419,8 @@ def main():
     
         ht[t] = ean[t] - he[t]
         hH[t] = he[t]/(he[t]+hh[t])
+        if (hH[t] > 0.5):
+            hH[t] = 1 - hH[t]
         pm[t] = (pd[t]+pu[t])/2
     
         strs[t], wast[t], s[t], riw[t], frw[t], hast[t], umal[t] = mod.wind_parameters(auxiw, rw, pe[t], he[t], n[t], glin[t], auxean)
@@ -529,10 +532,13 @@ def main():
 
 # generation periods (total period is divided by 3 shorter periods)
 # h: he/H and Wedderburn number for each subperiod (confidence interval with 95%)
-                                               
+                                                   
     group = [genera[i:i+int(lin/3)] for i in range(0, len(genera), int(lin/3))]
     hH_gp = [hH[i:i+int(lin/3)] for i in range(0, len(hH), int(lin/3))]
     wi_gp = [wedd_inv[i:i+int(lin/3)] for i in range(0, len(wedd_inv), int(lin/3))]
+    
+
+    
 
     h_lim1 = mod.ci(hH_gp[0])
     W_lim1 = mod.ci(wi_gp[0])
@@ -540,6 +546,7 @@ def main():
     W_lim2 = mod.ci(wi_gp[1])
     h_lim3 = mod.ci(hH_gp[2])
     W_lim3 = mod.ci(wi_gp[2])
+    
 
 
 #date - formating data
@@ -620,6 +627,7 @@ def main():
     cp = np.sqrt(m_glin*m_he*(1-m_he/(m_he+m_hh)))  
 
 # theoretical periods
+
     pzv1h1 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,1))
 
     pxv1h1 = np.array(miw.disp_xmodel2(m_pe,m_ph,m_he,m_hh,ls_fetch,1))
@@ -759,21 +767,27 @@ def main():
     power_sensor    = []
     freqe           = []
     welch_sensor    = []
+    
 
-
-    order    = 3                 # define the order of the bandpass filter 
+    order    = 6                 # define the order of the bandpass filter 
     if filter_process == 1 :  # define the range of the bandpass filter
         low1, high1 = 1/((pxv1h1[2]/60)/60), 1/((pxv1h1[0]/60)/60) # banded through internal wave model V1H1 (lower mode)
 
     else:
-        low1, high1 = 1/low_per, 1/high_per
+        low1, high1 = 1/high_per, 1/low_per
     
     if turn_temp == 1:
+        
+        
         for index in range(qt):   # spectral analysis for all sensors
         
             new = mod.vector_time (temp,index,lin)
-        
-            filtered_band = mod.butter_bandpass_filter(new, low1, high1, dt, 0.65, order)
+            fs = 1/dt
+            
+            try:
+                filtered_band = mod.butter_bandpass_filter(new, low1, high1, fs, order)
+            except ValueError:
+                filtered_band = None
             
             aux_time, aux_per, aux_power = mod.wave_spectral ( new, dt, mother)
             aux_freq, aux_wl_per, aux_welch = mod.welch_method(new,0,window, dt)
@@ -804,9 +818,9 @@ def main():
     # normalized water level variation 
 
     if filter_process == 1 :        # define the range of the bandpass filter
-        lowcut, highcut  = 1/((pxv1h1[2]/60)/60), 1/((pxv1h1[2]/60)/60)
+        lowcut, highcut  = 1/((pxv1h1[2]/60)/60), 1/((pxv1h1[0]/60)/60)
     else:
-        lowcut, highcut  =  1/low_per,  1/high_per
+        lowcut, highcut  =  1/high_per, 1/low_per
 
     freq      = []
     power     = []
@@ -825,7 +839,12 @@ def main():
                 aux_time, aux_per, aux_power = mod.wave_spectral (iso[i], dt, mother)
             
                 aux_freq, _, aux_welch = mod.welch_method(iso[i],windsize,window, dt)
-                aux_band = mod.butter_bandpass_filter(iso[i], lowcut, highcut, dt, 0.5, order)
+                fs = 1/dt
+                
+                try:
+                    aux_band = mod.butter_bandpass_filter(iso[i], lowcut, highcut, fs, order)
+                except ValueError:
+                    aux_band = None
                 
                 iso_corrected[i] = np.mean(abs((iso[i] - np.mean(iso[i])) - ean_norm))
     
@@ -1003,7 +1022,26 @@ def main():
     print('> ')
     root.update()
     
-    print ("> Part V       Plotting graphs and making reports... ")
+# -----------------------------------------------------------------------------
+    print ("> Part V        Generating text files... ")
+    root.update()
+    
+    os.makedirs(output_path+'textfiles')
+
+    if turn_iso == 1:
+        for i in range(4):
+            if(tau[i]!=-999):
+                np.savetxt(output_path+'textfiles/spectral_isotherms'+str(tau[i])+'.txt',np.column_stack((freq[i],welch[i])), fmt='%0.8f %0.15f')                
+                np.savetxt(output_path+'textfiles/isotherms'+str(tau[i])+'.txt',np.column_stack((time_temp[i],iso[i])), fmt='%0.8f %0.5f')
+                
+    if turn_temp == 1:
+        for i in range(4):
+            if(sen[i]==1):
+                np.savetxt(output_path+'textfiles/spectral_sensor'+str(sen[i])+'.txt',np.column_stack((freqe[i],welch_sensor[i])), fmt='%0.8f %0.15f')
+    
+
+# -----------------------------------------------------------------------------    
+    print ("> Part VI       Plotting graphs and making reports... ")
     root.update()  
     print('> ')
     root.update()
@@ -1121,8 +1159,8 @@ def main():
         ax1 = plt.subplot2grid((1,2),(0,0))
         ax2 = plt.subplot2grid((1,2),(0,1),sharey=ax1)
 
-        ax1.set_title('(a)',loc='left')
-        ax2.set_title('(b)',loc='left')
+        ax1.set_title('(a) ',loc='left')
+        ax2.set_title('(b) Coriolis correction',loc='left')
 
         graph.psd_isox(tau, freq, welch, fx_11, fx_21, fx_31,largelen, ax1)
 
@@ -1165,6 +1203,28 @@ def main():
     plt.setp(ax2.get_xticklabels(), visible=False)
     plt.setp(ax3.get_xticklabels(), visible=False)
     plt.savefig(output_path+'degenera.png', dpi = depi)
+
+
+
+
+
+    plt.figure( figsize=(8,6))
+
+    ax1 = plt.subplot2grid((3,2), (0,0), rowspan=3)
+    ax2 = plt.subplot2grid((3,2), (0,1), rowspan=3)
+
+
+    ax1.set_title('(a) - Original Chart',loc='left')
+    ax2.set_title('(b) - Zooming',loc='left')
+
+
+    met = m_h2
+
+    graph.degeneration_evolution(P1,P2,P3,hH_gp,wi_gp,m_pe,m_ph,met,m_he+m_hh,ls_fetch[1],'no',ax1)
+    graph.degeneration_evolution(P1,P2,P3,hH_gp,wi_gp,m_pe,m_ph,met,m_he+m_hh,ls_fetch[1],'yes',ax2)
+
+    plt.savefig(output_path+'degenera_evolution.png', dpi = depi)
+
 
 
     plt.figure( figsize=(8,6))
@@ -1271,16 +1331,16 @@ def main():
         plt.savefig(output_path+'isotherms.png',dpi = depi)
 
 
+        if(ana1 != -999 and ana2 != -999):
+            fig, ax1 = plt.subplots(figsize=(8,5))
+            graph.coherence_iso(tau,coiso,friso,ana1,ana2, ax1)   
+        
+            ax2 = ax1.twinx()
+        
+            graph.phase_iso(tau,phiso,friso,cliso,ana1,ana2, ax2)   
+        
 
-        fig, ax1 = plt.subplots(figsize=(8,5))
-        graph.coherence_iso(tau,coiso,friso,ana1,ana2, ax1)   
-        
-        ax2 = ax1.twinx()
-        
-        graph.phase_iso(tau,phiso,friso,cliso,ana1,ana2, ax2)   
-        
-
-        plt.savefig(output_path+'coherence.png',dpi = depi)
+            plt.savefig(output_path+'coherence.png',dpi = depi)
 
 
 
@@ -1293,12 +1353,19 @@ def main():
 
     if turn_iso == 1:
 
+        
         plt.figure(figsize=(8,3))
         ax1 = plt.subplot2grid((1,1),(0,0))
-        ax1.set_title('high-pass filter',loc='left')
+        if filter_process == 1:
+            ax1.set_title('Band-pass filter - Bandwidth: '+str(round(pxv1h1[2]/60/60,1))+' h to '+str(round(pxv1h1[0]/60/60,1))+' h',loc='left')
+        
+        elif filter_process == 2:
+            ax1.set_title('Band-pass filter - Bandwidth: '+str(round(low_per,1))+' h to '+str(round(high_per,1))+' h',loc='left')
     
         graph.temp_bandpass(dx, band, tau, ax1)
 
+
+        
         plt.setp(ax4.get_xticklabels(), visible=False)
         plt.savefig(output_path+'iso_bandpass.png',dpi = depi)
 
@@ -1395,21 +1462,15 @@ def main():
         ax1 = plt.subplot2grid((1,1),(0,0))
 
         if filter_process == 1:
-            ax1.set_title('Band-pass filter - cutoff frequency in hours: '+str(round(pxv1h1[0]/60/60,1))+' h and '+str(round(pxv1h1[2]/60/60,1))+' h',loc='left')
+            ax1.set_title('Band-pass filter - Bandwidth: '+str(round(pxv1h1[2]/60/60,1))+' h to '+str(round(pxv1h1[0]/60/60,1))+' h',loc='left')
         
         elif filter_process == 2:
-            ax1.set_title('Band-pass filter - cutoff frequency in hours: '+str(round(high_per,1))+' h and '+str(round(low_per,1))+' h',loc='left')
-
+            ax1.set_title('Band-pass filter - Bandwidth: '+str(round(low_per,1))+' h to '+str(round(high_per,1))+' h',loc='left')
+        
         graph.depth_bandpass(dx, s_filtered,depth, time_win,sen, ax1)
-
-
-        plt.setp(ax1.get_xticklabels(), visible=False)
-
         plt.savefig(output_path+'depth_bandpass.png',dpi = depi)
 
-
-
-    
+  
     
     print (">         Making the Interwave Analyzer's report")
     root.update()
@@ -1487,12 +1548,12 @@ def main():
     canvas.drawString(460, 345,  str(round(fdura,3)))
     canvas.drawString(380, 330, 'Direction factor:')
     canvas.drawString(460, 330,  str(round(fdire,3)))
-    canvas.drawString(280, 310, 'Mean wind stress:')
-    canvas.drawString(440, 310,  str(round(m_wast,5))+' N/m²')
-    canvas.drawString(280, 295, 'Minimum wind stress:')
-    canvas.drawString(440, 295,  str(round(np.nanmin(wast),5))+' N/m²')
-    canvas.drawString(280, 280, 'Maximum wind stress:')
-    canvas.drawString(440, 280,  str(round(np.nanmax(wast),5))+' N/m²')
+    canvas.drawString(280, 310, 'Mean friction velocity of the wind:')
+    canvas.drawString(440, 310,  str(round(m_wast,5))+' m/s')
+    canvas.drawString(280, 295, 'Minimum friction velocity of the wind:')
+    canvas.drawString(440, 295,  str(round(np.nanmin(wast),5))+' m/s')
+    canvas.drawString(280, 280, 'Maximum friction velocity of the wind:')
+    canvas.drawString(440, 280,  str(round(np.nanmax(wast),5))+' m/s')
 
 
     g3 =ImageReader(output_path+'temporal_analysis.png')
@@ -1509,7 +1570,7 @@ def main():
 
     canvas.drawString(30, 90, 'Daily averaged variables at thermocline depth:')
     canvas.drawString(30, 70,  'Richardson number:')
-    canvas.drawString(140, 70,  str(round(np.nanmean(mod.average(riw,24/dt)),0))+' \xb1 '+str(round(np.std(mod.average(riw,24/dt))*1.96/np.sqrt(dt*lin/24),0)))
+    canvas.drawString(140, 70,  str(round(np.nanmean(mod.average(riw,24/dt)),0))+' \xb1 '+str(round(np.std(mod.average(riw,24/dt))*1.96/np.sqrt(dt*lin/24),0))) # 1.96 = 95%
 
     canvas.drawString(30, 55, 'Wedderburn number:')
     canvas.drawString(140,55,  str(round(np.nanmean(mod.average(wedd,24/dt)),0))+' \xb1 '+str(round(np.std(mod.average(wedd,24/dt))*1.96/np.sqrt(dt*lin/24),0)))
@@ -1569,11 +1630,11 @@ def main():
 
     canvas.drawString(340,390,'Maximum amplitude of BSIW:')
     canvas.drawString(340,375,'P1')
-    canvas.drawString(460,375, str(round(np.nanmax(wi_gp[0])*m_he,3))+' m')
+    canvas.drawString(460,375, str(round(np.nanmax(wi_gp[0])*m_he/2,3))+' m')
     canvas.drawString(340,360,'P2')
-    canvas.drawString(460,360, str(round(np.nanmax(wi_gp[1])*m_he,3))+' m')
+    canvas.drawString(460,360, str(round(np.nanmax(wi_gp[1])*m_he/2,3))+' m')
     canvas.drawString(340,345,'P3')
-    canvas.drawString(460,345, str(round(np.nanmax(wi_gp[2])*m_he,3))+' m')
+    canvas.drawString(460,345, str(round(np.nanmax(wi_gp[2])*m_he/2,3))+' m')
 
     canvas.drawString(340,325,'Internalwave Classification:')
     canvas.drawString(340,310,'P1')
@@ -1853,7 +1914,7 @@ def main():
     print ("> ")
     root.update()
     plot_time = time.time()
-    print ("> Execution time for part V: ")
+    print ("> Execution time for part V and VI: ")
     root.update() 
     print ("> "+str(round(plot_time-anal_time,4))+' seconds')
     root.update()  
