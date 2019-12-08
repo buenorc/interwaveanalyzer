@@ -414,7 +414,7 @@ def metathick (qt,h,tau,sal,pre,minval):
     #
     dpz, zt, mid, p = thermo_region(qt,h,tau,sal,pre)
     
-    # interface between metalimnion and heplimnion
+    # interface between metalimnion and epilimnion
     z = zt
     dmin = deriva(p[z+1],p[z],h[z+1],h[z])
     
@@ -422,9 +422,12 @@ def metathick (qt,h,tau,sal,pre,minval):
         z=z-1
         dmin = deriva(p[z+1],p[z],h[z+1],h[z])
 
-    
-    aux1 = media(h[z+1],h[z]) - media(h[z+2],h[z+1])
-    aux2 = deriva(p[z+1],p[z],h[z+1],h[z])-deriva(p[z+2],p[z+1],h[z+2],h[z+1])
+    try:
+        aux1 = media(h[z+1],h[z]) - media(h[z+2],h[z+1])
+        aux2 = deriva(p[z+1],p[z],h[z+1],h[z])-deriva(p[z+2],p[z+1],h[z+2],h[z+1])
+    except IndexError:
+        aux1 = 1
+        aux2 = 1
     
     if(aux2 == 0.0):
         ze = media(h[z+1],h[z])
