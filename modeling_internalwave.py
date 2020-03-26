@@ -27,7 +27,10 @@ def biquadratic(L,he,hh,gamma,m):
     r     = -ma.pow(g,2)*(gamma-1)*k*te
 
     delta = ma.pow(q,2) - 4*p*r
+    
+
     omega = np.sqrt((-q-np.sqrt(delta))/(2*p))
+
     
     peri  = 2*np.pi/omega
     
@@ -36,7 +39,10 @@ def biquadratic(L,he,hh,gamma,m):
 def eigen2_values(L,lamb,m):
     
     g     = 9.81   # m/s²    
-    peri =  2*L/(m*np.sqrt(g*lamb))    # interfacial period (sec) 
+    try:
+        peri =  2*L/(m*np.sqrt(g*lamb))    # interfacial period (sec) 
+    except RuntimeWarning:
+        return None
     
     return peri # seconds
 
@@ -44,19 +50,35 @@ def eigen3_values(L,lambv1,lambv2,m):
     
     g     = 9.81   # m/s²
 
-    peri_v1 =  2*L/(m*np.sqrt(g*lambv1))     # V1 interfacial period (sec) 
-    peri_v2 =  2*L/(m*np.sqrt(g*lambv2))     # V2 interfacial period (sec)
-    
+    try:
+        peri_v1 =  2*L/(m*np.sqrt(g*lambv1))     # V1 interfacial period (sec) 
+    except RuntimeWarning:
+        peri_v1 = None
+        
+    try:
+        peri_v2 =  2*L/(m*np.sqrt(g*lambv2))     # V2 interfacial period (sec)
+    except RuntimeWarning:
+        peri_v2 = None
+        
     return peri_v1, peri_v2
 
 def eigen4_values(L,lambv1,lambv2,lambv3,m):
 
     g     = 9.81   # m/s²
 
-    peri_v1 =  2*L/(m*np.sqrt(g*lambv1))     # V1 interfacial period (sec) 
-    peri_v2 =  2*L/(m*np.sqrt(g*lambv2))     # V2 interfacial period (sec)
-    peri_v3 =  2*L/(m*np.sqrt(g*lambv3))     # V3 interfacial period (sec)
-    
+    try:
+        peri_v1 =  2*L/(m*np.sqrt(g*lambv1))     # V1 interfacial period (sec) 
+    except RuntimeWarning:
+        peri_v1 = None
+    try:
+        peri_v2 =  2*L/(m*np.sqrt(g*lambv2))     # V2 interfacial period (sec)
+    except RuntimeWarning:
+        peri_v2 = None
+    try:
+        peri_v3 =  2*L/(m*np.sqrt(g*lambv3))     # V3 interfacial period (sec)
+    except RuntimeWarning:
+        peri_v3 = None
+        
     return peri_v1, peri_v2, peri_v3
 # -----------------------------------------------------------------------------
 #  
@@ -70,6 +92,7 @@ def disp_zmodel (pe,ph,he,hh,L,m):
 #   
     gamma = pe/ph
     
+
     peri_min = biquadratic(L[0],he,hh,gamma,m)
     peri_ave = biquadratic(L[1],he,hh,gamma,m)
     peri_max = biquadratic(L[2],he,hh,gamma,m)
@@ -110,9 +133,8 @@ def disp_xmodel3(p1,p2,p3,h1,h2,h3,L,vertical,m):
     gamma13 = p1/p3
     gamma23 = p2/p3
     
-    A = [[h1, h1,  h1], \
-        [h2*gamma12,  h2, h2],\
-        [h3*gamma13,  h3*gamma23, h3]]
+    
+    A = [[h1, h1,  h1], [h2*gamma12,  h2, h2], [h3*gamma13,  h3*gamma23, h3]]
     
     solv = np.linalg.eigvals(A)
     #sorted(solv)
@@ -154,11 +176,7 @@ def disp_xmodel4(p1,p2,p3,p4,h1,h2,h3,h4,L,vertical,m):
     else:
         return pv3_min,pv3_ave,pv3_max
 
-def coriolis_effect(lat,to):
-    
-    lat     = np.radians(lat)
-    omega_e = 2*np.pi/(24*60*60)
-    fo      = 2*omega_e*np.sin(lat)
+def coriolis_effect(fo,to):
     
     aux = 4*np.power(np.pi,2) + np.power(to,2)*np.power(fo,2)  
     t   = np.sqrt(4*np.power(np.pi,2)*np.power(to,2)/aux)  #second

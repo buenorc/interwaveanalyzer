@@ -102,7 +102,7 @@ def temper_read(nam,lin,qt):
         
 
        
-def cot_read(nac):
+def cot_read(nac,ean_serie,ean_cota):
     #
     # function to read the elevation data from files of vossoroca res.
     # cot[t] - float 1d dimension - values of water level in meters
@@ -115,41 +115,48 @@ def cot_read(nac):
     #
     global cot,serial_c
     
-    nac = nac.replace('\n','')
-    lic = file_len(nac)
     
-    cye = np.zeros(lic,float)
-    cmo = np.zeros(lic,float)
-    cda = np.zeros(lic,float)
-    cho = np.zeros(lic,float)
-    cmi = np.zeros(lic,float)
-    cot = np.zeros(lic,float)
+    if ean_serie == 1:
+        cot = ean_cota
     
-    serial_c = np.zeros(lic,float)
+    elif ean_serie == 2:
+        nac = nac.replace('\n','')
+    
+    
+        lic = file_len(nac)
+    
+        cye = np.zeros(lic,float)
+        cmo = np.zeros(lic,float)
+        cda = np.zeros(lic,float)
+        cho = np.zeros(lic,float)
+        cmi = np.zeros(lic,float)
+        cot = np.zeros(lic,float)
+    
+        serial_c = np.zeros(lic,float)
 
-    with open(nac) as f:
+        with open(nac) as f:
 
-        next(f)
-        t=0
-        for line in f:   
-            line = line.strip()
-            camp = line.split('\t')
+            next(f)
+            t=0
+            for line in f:   
+                line = line.strip()
+                camp = line.split('\t')
         
-            cye[t] = float(camp[0]) 
-            cmo[t] = float(camp[1])
-            cda[t] = float(camp[2])      
-            cho[t] = float(camp[3])
-            cmi[t] = float(camp[4])
+                cye[t] = float(camp[0]) 
+                cmo[t] = float(camp[1])
+                cda[t] = float(camp[2])      
+                cho[t] = float(camp[3])
+                cmi[t] = float(camp[4])
             
-            serial_c[t] = serial_number(cye[t],cmo[t],cda[t],cho[t],cmi[t])
+                serial_c[t] = serial_number(cye[t],cmo[t],cda[t],cho[t],cmi[t])
         
-            cot[t] = float(camp[5])
+                cot[t] = float(camp[5])
         
-            t=t+1
+                t=t+1
     
 
 
-def serial_cota(serial_t,nac,lin,qt,temp,sen):
+def serial_cota(serial_t,nac,lin,qt,temp,sen,ean_serie,ean_cota,z0):
     #
     # Function to match the temperature values with elevation values and
     # to adjust the depth of the sensors with the water level
@@ -157,7 +164,7 @@ def serial_cota(serial_t,nac,lin,qt,temp,sen):
     # h    [t:lin][z:qt] - depth of the sensors (ref=800m - last sensor) 
     # tempa[t:lin][z:qt] - Temp data adjusted with water level (°C)
     #    
-    cot_read(nac)
+    cot_read(nac,ean_serie,ean_cota)
     
     ean   = np.zeros(lin,float)
     h     = np.zeros((lin,qt),float)
@@ -165,17 +172,21 @@ def serial_cota(serial_t,nac,lin,qt,temp,sen):
     tempa = temp
     sensor, condition = level(sen, qt)
 
+
     for t in range(lin):
         
-        indice = find_nearest(serial_c,serial_t[t])
-        ean[t] = cot[indice]
+        if ean_serie == 1:
+            ean[t] = cot
+        else:
+            indice = find_nearest(serial_c,serial_t[t])
+            ean[t] = cot[indice]
 
         for z in range(qt):
             
             if condition[z] == 1:
                 h[t][z] = ean[t] - sensor[z]
             elif condition[z] == 2:
-                h[t][z] = 799 + sensor[z]
+                h[t][z] = z0 + sensor[z]
             if h[t][z] > h[t][z-1] and z>0:
                 
                 aux        = h[t][z]

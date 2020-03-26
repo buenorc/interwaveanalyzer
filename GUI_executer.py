@@ -28,14 +28,14 @@ def open_button():
         with open(str(path_open),'r') as reader:
             path_temp = reader.readline()
             path_temp = path_temp.replace('\n','')
-            path_level = reader.readline()
-            path_level = path_level.replace('\n','')
             path_meteo = reader.readline()
             path_meteo = path_meteo.replace('\n','')
             path_senso = reader.readline()
             path_senso = path_senso.replace('\n','')
             height_wind.delete(0,'end')
             height_wind.insert(END,float(reader.readline()))
+            reference_level.delete(0,'end')
+            reference_level.insert(END,float(reader.readline()))
             contri_wind_var.set(float(reader.readline()))
             latitude_var.set(float(reader.readline()))
             dpi.set(int(reader.readline()))
@@ -46,8 +46,17 @@ def open_button():
             elif int(typechoose.get()) == 2:
                 path_fetch = reader.readline()
                 path_fetch = path_fetch.replace('\n','')
+            typelevel.set(int(reader.readline()))
+            if int(typelevel.get()) == 1:
+                unif_level.delete(0,'end')
+                unif_level.insert(END,float(reader.readline())) 
+            elif int(typelevel.get()) == 2:
+                path_level = reader.readline()
+                path_level = path_level.replace('\n','')
+
             meta.delete(0,'end')
             meta.insert(END,float(reader.readline())) 
+            
             filterchoose.set(int(reader.readline()))
             if int(filterchoose.get()) == 2:
                 
@@ -59,11 +68,20 @@ def open_button():
 
                 lv1.insert(END,float(reader.readline()))
                 hv1.insert(END,float(reader.readline()))
-
             else:
                 for i in range(2):
                     nextline = next(reader)
-                
+
+
+            winsizechoose.set(int(reader.readline()))
+            if int(winsizechoose.get()) == 2:  
+                winsize.config(state='normal')                          
+                winsize.delete(0,'end')
+                winsize.insert(END,float(reader.readline()))
+            else:
+                nextline = next(reader)
+
+               
             win = reader.readline()
             for i in range(4):
                 if win.strip() == welch_windows[i]:
@@ -118,7 +136,7 @@ def open_button():
                 
             c1 = reader.readline()
             c2 = reader.readline()
-            for i in range(4):
+            for i in range(6):
                 if c1.strip() == comparison_options[i]:
                     compa1_var.set(comparison_options[i])            
                 if c2.strip() == comparison_options[i]:
@@ -170,7 +188,7 @@ def open_button():
             folder_path = reader.readline()
             
 def AboutCallBack():
-   msg = messagebox.showinfo( "About", " Interwave Analyzer - Beta Version \n Copyright (C) 2019 Rafael de Carvalho Bueno \n All rights reserved \n \n Developer: Rafael de Carvalho Bueno \n Supervisor: Tobias Bleninger \n Report problems and improvements to email adresss below \n rafael.bueno@ufpr.br\n \n for mor information, see: \n www.interwaveanalyzer.org \n ")    
+   msg = messagebox.showinfo( "About", " Interwave Analyzer - Version 1.00.1 \n Copyright (C) 2019 Rafael de Carvalho Bueno \n All rights reserved \n \n Developer: Rafael de Carvalho Bueno \n Supervisor: Tobias Bleninger \n Report problems and improvements to email adresss below \n rafael.bueno@ufpr.br\n \n for mor information, see: \n www.interwaveanalyzer.org \n ")    
 
 def OpenUrl(url):
     webbrowser.open_new(url)
@@ -190,10 +208,10 @@ def save_settings(temporary):
     with open(data_file, 'w') as data:
 
         data.write(str(path_temp)+space)
-        data.write(str(path_level)+space)
         data.write(str(path_meteo)+space)
         data.write(str(path_senso)+space)
         data.write(str(height_wind.get())+'\n')
+        data.write(str(reference_level.get())+'\n')
         data.write(str(contri_wind_var.get())+'\n')
         data.write(str(latitude_var.get())+'\n')
         data.write(str(dpi.get())+'\n')
@@ -202,14 +220,27 @@ def save_settings(temporary):
             data.write(str(vari_len.get())+'\n')
         elif int(typechoose.get()) == 2:
             data.write(str(path_fetch)+space)
+        
+        data.write(str(int(typelevel.get()))+'\n')
+        if int(typelevel.get()) == 1:
+            data.write(str(unif_level.get())+'\n')
+        elif int(typelevel.get()) == 2:
+            data.write(str(path_level)+space)
         data.write(str(meta.get())+'\n')
+        
+        
         data.write(str(int(filterchoose.get()))+'\n')
         if int(filterchoose.get()) == 2:
             data.write(str(lv1.get())+'\n')
             data.write(str(hv1.get())+'\n')
-
         else:
             data.write(str(-999)+'\n')
+            data.write(str(-999)+'\n')
+            
+        data.write(str(int(winsizechoose.get()))+'\n')
+        if int(winsizechoose.get()) == 2:
+            data.write(str(winsize.get())+'\n')
+        else:
             data.write(str(-999)+'\n')
 
         data.write(str(windows_var.get())+'\n')
@@ -289,11 +320,7 @@ def temperature_function():
 def level_function():
     global path_level
     path_level = askopenfilename(defaultextension='.niv', filetypes=[('NIV files','*.niv')])
-    
-    if path_level:
-        label = Label(tab1, text="selected",anchor="e").grid(row=3,column=3)
-    else:
-        label = Label(tab1, text="file not selected", anchor="e").grid(row=3,column=3)
+
    
 def meteo_function():
     global path_meteo
@@ -346,6 +373,18 @@ def selected_len():
         file_len.config(state='disable')
         vari_len.config(state='normal')
 
+
+def selected_level():
+    global level_type
+    level_type = int(typelevel.get())
+
+    if int(typelevel.get())==2:
+        file_level.config(state='normal')
+        unif_level.config(state='disable')
+    elif int(typechoose.get())==1: 
+        file_level.config(state='disable')
+        unif_level.config(state='normal')
+        
 def selected_filter():
     global filter_type
     filter_type = int(filterchoose.get())
@@ -358,6 +397,15 @@ def selected_filter():
         lv1.config(state='normal')
         hv1.config(state='normal')
 
+def selected_windowsize():
+    global windsize_type
+    windsize_type = int(winsizechoose.get())
+
+    if int(winsizechoose.get())==1:
+        winsize.config(state='disable')
+
+    elif int(winsizechoose.get())==2: 
+        winsize.config(state='normal')
 
 def selected_isotherms():
     global isotherms_type
@@ -513,9 +561,8 @@ Label(tab1,anchor="w",font="Verdana 8 bold", text="Input files").grid(row=1,colu
 
 Label(tab1,anchor="w", text="Temperature data:").grid(row=2,column=0,pady=4,sticky='w')
 Button(tab1,text='Open File',command=temperature_function).grid(row=2,column=1,pady=4,sticky='w')
-# ----------------------------Water level--------------------------------------
-Label(tab1,anchor="w", text="Water level data:").grid(row=3,column=0,pady=4,sticky='w')
-file_leve = Button(tab1,text='Open File',command=level_function).grid(row=3,column=1,pady=4,sticky='w')
+
+
 # ------------------------------------------------------------------
 Label(tab1,anchor="w", text="Meteorological data:").grid(row=4,column=0,pady=4,sticky='w')
 Button(tab1,text='Open File',command=meteo_function).grid(row=4,column=1,pady=4,sticky='w')
@@ -539,7 +586,10 @@ latitude = Spinbox(tab1, from_=-180, to=180, textvariable=latitude_var)
 latitude.grid(row=7,column=1,pady=4)
 
 tka.Separator(tab1, orient=HORIZONTAL).grid(column=0, columnspan= 5, row=8, padx=10, pady=10, sticky='we')
-# ----------------------------Water level--------------------------------------
+
+
+# ---------------------------- Wind -------------------------------------------
+
 Label(tab1,anchor="w",font="Verdana 8 bold", text="Basin length (based on wind direction):",width=50).grid(row=9,column=0,pady=8,sticky='w')
 
 typechoose = StringVar()
@@ -558,12 +608,40 @@ file_len = Button(tab1,text='Open File',command=fetch_function)
 file_len.grid(row=11,column=1,sticky='w')
 file_len.config(state='disable')
 
+# ------------------------------ Sensor level ---------------------------------
 tka.Separator(tab1, orient=HORIZONTAL).grid(column=0, columnspan= 5, row=12, padx=10, pady=10, sticky='we')
 
 Label(tab1,anchor="w", text="Sensor level:").grid(row=13,column=0,pady=4,sticky='w')
 Button(tab1,text='Open File',command=senso_function).grid(row=13,column=1,pady=4,sticky='w')
 
+Label(tab1, text="Level of reference (m)").grid(row=14,column=0,pady=4,sticky='w')
+reference_level = Entry(tab1, bd =3)
+reference_level.insert(END,0)
+reference_level.grid(row=14,column=1,pady=4)
 
+# ------------------------------ Water level data -----------------------------
+tka.Separator(tab1, orient=HORIZONTAL).grid(column=0, columnspan= 5, row=15, padx=10, pady=10, sticky='we')
+
+Label(tab1,anchor="w",font="Verdana 8 bold", text="Water level data:",width=50).grid(row=16,column=0,pady=8,sticky='w')
+
+typelevel = StringVar()
+typelevel.set(1)
+
+rad1 = Radiobutton(tab1,text='Uniform', variable=typelevel, value=1, command=selected_level).grid(row=17,column=0,pady=4,sticky='w') 
+rad2 = Radiobutton(tab1,text='File', variable=typelevel, value=2, command=selected_level).grid(row=18,column=0,pady=2,sticky='w')
+ 
+Label(tab1, text="Water level (meters):").grid(row=17,column=0,pady=4)
+unif_level = Entry(tab1, bd =3)
+unif_level.grid(row=17,column=1)
+unif_level.config(state='normal')
+
+
+file_level = Button(tab1,text='Open File',command=level_function)
+file_level.grid(row=18,column=1,sticky='w')
+file_level.config(state='disable')
+
+
+# --------------- Spectral Analysys and Definitions   (tab 2) -----------------
 
 Label(tab2,anchor="w",font="Verdana 8 bold", text="Density structure",width=50).grid(row=1,column=0,sticky='w',pady=8)
 
@@ -573,6 +651,8 @@ meta.insert(END,0.1)
 meta.grid(row=2,column=1,pady=4)
 
 tka.Separator(tab2, orient=HORIZONTAL).grid(column=0, columnspan= 5, row=3, padx=10, pady=8, sticky='we')
+
+# -----------------------------------------------------------------------------
 
 Label(tab2,anchor="w",font="Verdana 8 bold", text="Band pass filter (Cutoff Frequency)",width=50).grid(row=4,column=0,pady=8,sticky='w')
 
@@ -591,6 +671,8 @@ Label(tab2, text="Low-frequency band period (hour)").grid(row=8,column=0,pady=3,
 hv1 = Entry(tab2, bd =3)
 hv1.grid(row=8,column=1)
 hv1.config(state='disable')
+
+# -----------------------------------------------------------------------------
 
 tka.Separator(tab2, orient=HORIZONTAL).grid(column=0, columnspan= 5, row=11, padx=10, pady=8, sticky='we')
 
@@ -614,6 +696,26 @@ mother_var.set(wavelet_windows[0])
 
 mother_options = OptionMenu(*(tab2,mother_var)+tuple(wavelet_windows))
 mother_options.grid(row=14,column=1,pady=4,sticky='w')
+
+# -----------------------------------------------------------------------------
+
+
+tka.Separator(tab2, orient=HORIZONTAL).grid(column=0, columnspan= 5, row=15, padx=10, pady=8, sticky='we')
+
+Label(tab2,anchor="w",font="Verdana 8 bold", text="Window Size (Welch-averaging)",width=50).grid(row=16,column=0,pady=8,sticky='w')
+
+winsizechoose = StringVar()
+rad1 = Radiobutton(tab2,text='Defined by the Internal wave model (10 times the V1H1 mode)', variable=winsizechoose, value=1, command=selected_windowsize).grid(row=17,column=0,pady=4,sticky='w') 
+rad2 = Radiobutton(tab2,text='Defined manually (days): ', variable=winsizechoose, value=2, command=selected_windowsize).grid(row=18,column=0,pady=2,sticky='w')
+ 
+winsizechoose.set(1)
+
+
+winsize = Entry(tab2, bd =3)
+winsize.grid(row=18,column=1)
+winsize.config(state='disable')
+
+# ----------------------------- Isotherm Analsysis (tab3) ---------------------
 
 
 isotherm_button= IntVar()

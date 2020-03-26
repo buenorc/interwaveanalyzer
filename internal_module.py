@@ -15,6 +15,7 @@ import warnings
 import math
 
 
+warnings.simplefilter("error")
 # -----------------------------------------------------------------------------
 # Function to define the comparison (coherence and phase shift)
 # -----------------------------------------------------------------------------
@@ -109,6 +110,17 @@ def density_state(qt,tau,sal,pre):  # water density profile
 # -----------------------------------------------------------------------------
 # Conversion functions
 # -----------------------------------------------------------------------------
+
+
+def depthmean(depth):
+    
+    hmean = np.zeros(len(depth[0]),float)
+    for j in range(len(depth[0])):
+        
+        hmean[j] = np.mean(depth[:,j])
+        
+    hmean = hmean[::-1]
+    return hmean
 
 def vector_aux (a,i,nj):
     
@@ -208,12 +220,56 @@ def media(zu,zd):
     med = abs(zu+zd)/2
     return med
 
-#def mean(d):
-    # difference between data and the mean data 
-#    mean     = np.mean(d)
- #   diff     = (d - mean)
+def sorting(data):
     
-#    return diff
+    ordered = np.zeros((len(data),len(data[0])),float)
+
+    for t in range(len(data)):
+        
+        data_aux = vector_aux(data,t,len(data[0]))
+        
+        temporary = []
+        first     = 'first'
+        
+        for i in range(len(data_aux)):
+            
+            if np.isnan(data_aux[i]) == False:
+                temporary.append(data_aux[i])
+            
+                if first == 'first':
+                    first = 'secondaries'
+                    idx   = i
+                
+        temporary = -np.sort(-np.array(temporary))
+    
+        auxiliary     = np.full(len(data_aux),np.nan)
+        auxiliary[idx:len(temporary)+idx] = temporary
+        
+        ordered[t][:] = auxiliary
+    
+    return ordered
+
+def sorting_1d(data):
+
+    temporary = []
+    first     = 'first'
+        
+    for i in range(len(data)):
+            
+        if np.isnan(data[i]) == False:
+            temporary.append(data[i])
+            
+            if first == 'first':
+                first = 'secondaries'
+                idx   = i
+                
+    temporary = -np.sort(-np.array(temporary))
+    
+    auxiliary     = np.full(len(data),np.nan)
+    auxiliary[idx:len(temporary)+idx] = temporary
+    
+    return auxiliary
+
 
 def zero():
     
@@ -234,29 +290,33 @@ def value_nearest(array,value):
 
 def near (numbers,myNumber):
 
-    distance = abs(numbers[1] - myNumber)
+    distance = abs(numbers[0] - myNumber)
 
-    idx = 1   
-    c=1
-    while(c < len(numbers)):
+    idx = 0
+    
+    for c in range(len(numbers)):
             cdistance = abs(numbers[c] - myNumber)
             if(cdistance < distance):
                     idx = c
                     distance = cdistance           
-            c=c+1
     theNumber = numbers[idx]
     
     return theNumber, idx
 
-def interpolation(y1,y2,x1,x2,x):
+def interpolation(y1,y2,x1,x2,x,exc,auxiso):
     
     if(y1 == y2 or x1 == x2):
         return media(y1,y2)
     
-    else:
-        f = interpolate.interp1d([x1,x2], [y1,y2])
-        ynew = f(x)
-        return ynew
+    else: 
+        f = interpolate.interp1d([x1,x2], [y1,y2])    
+        
+        try:
+            return f(x)
+        
+        except ValueError:
+        
+            return auxiso                       
 
 
 def wind_average(wd,ws):
@@ -300,34 +360,21 @@ def isotherms (reqt, qt, h,tau,zmax,zmin,aux_iso):
     
     tau_near, idx = near(tau,reqt)
     
-    #if (aux_iso != None and abs(aux_iso-h[idx]) > 4):
-    #    return aux_iso
 
     if(tau_near > reqt):
         if (idx == qt-1):           
-            return zmin
+            return None   # we cannot estimat the depth because 
+                          # we dont have info bellow that point  
         else:
-            if (tau[idx] < tau[idx+1]):
-                if aux_iso != None:
-                    return aux_iso                
-                else:
-                    return None
-  
-            else:
-                return  interpolation(h[idx],h[idx+1],tau[idx],tau[idx+1],reqt)
-
+            return  interpolation(h[idx],h[idx+1],tau[idx],tau[idx+1],reqt,zmax,aux_iso)
     
     else:
-        if (idx == 1) :
+        if (idx == 0) :
             return zmax
         else:
-            if(tau[idx] > tau[idx-1]):
-                return zmax    
-            else:
-                return interpolation(h[idx-1],h[idx],tau[idx-1],tau[idx],reqt)
+            return interpolation(h[idx-1],h[idx],tau[idx-1],tau[idx],reqt,zmax,aux_iso)
     
- 
-                
+
 # -----------------------------------------------------------------------------
 # Methods to identify Thermocline/Halocline/Pycnocline
 # -----------------------------------------------------------------------------
@@ -392,8 +439,7 @@ def thermocline_depth (qt,h,tau,sal,pre):
     pdif = pdn+pup
     
     thermo = h[z+1]*(pup/pdif) + h[z]*(pdn/pdif)
-    
-    
+
 
     
     # return: thermo : thermocline deapth (relation with the surface water)
@@ -465,10 +511,10 @@ def metathick (qt,h,tau,sal,pre,minval):
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-# Average density and thickness of each layer (hpolimnion and epilimnion) 
+# Average density and thickness of each layer (hypolimnion and epilimnion) 
 # -----------------------------------------------------------------------------
     
-def density_2layer (qt,h,tau,sal,pre,H):
+def density_2layer (qt,h,tau,sal,pre,H,z0):
     # average density and thickness of each layer
     # model with just 2 layers (epilimnion and hipolimnion)
     #
@@ -481,8 +527,8 @@ def density_2layer (qt,h,tau,sal,pre,H):
     
     thermo, p = thermocline_depth (qt,h,tau,sal,pre)
     
-    hh = thermo - 799   # epilimnion thickness
-    he = H - thermo   # hipolimnion thickness
+    hh = thermo - z0   # epilimnion thickness
+    he = H - thermo     # hypolimnion thickness
     
     pe,ph,npe,nph=0,0,0,0
 
@@ -497,15 +543,17 @@ def density_2layer (qt,h,tau,sal,pre,H):
     if npe == 0:
         npe = 1
         pe  = p[0]
-        print('Warning 187: epilimnion thickness reached zero for some reason')
+
+    
+        
     pe = pe/npe     # epilimnion average density       
     ph = ph/nph     # hipolimnion average density
     pu = p[0]       # superficial density (first sensor = 1m from the top)
     pd = p[qt-1]    # bottom density (last sensor = 2m from the bottom)
-
+    
     return he, hh, pe, ph, pu, pd
 
-def density_3layer (qt,h,tau,sal,pre,minval,H):
+def density_3layer (qt,h,tau,sal,pre,minval,H,z0):
     # average density and thickness of each layer
     # model with just 2 layers (epilimnion and hipolimnion)
     #
@@ -518,11 +566,11 @@ def density_3layer (qt,h,tau,sal,pre,minval,H):
     ze, zh = metathick (qt,h,tau,sal,pre,minval) 
     
     
-    if(ze > zh and ze < h[0] and zh > 800):
+    if(ze > zh and ze < h[0] and zh > z0):
         
         h1 = H  - ze
         h2 = ze - zh
-        h3 = zh - 799
+        h3 = zh - z0
        
         p1, p2, p3, np1, np2, np3 = 0, 0, 0, 0, 0, 0
        
@@ -588,8 +636,9 @@ def wind_stress(w):
         Cd = 1.5*10**-3  # drag coefficient
     else:
         Cd = 1.0*10**-3
-        if (w == 0.0):
-            return -999
+        
+        if (w == 0.0): # low wind to characterize the stability of the lake
+            w = 0.1
             
     
     rho_air = 1.225 # density of the air (kg/m³)
@@ -610,19 +659,21 @@ def wind_parameters(w,rw,pe,he,n,glin,H):
     # wedd   = Wedderburn number (similiar to Richardson with more he/l) 
     
     k       = 0.4                    #Von Karman's constant 
+
+    
     stress  = wind_stress(w)    
-    
-    if stress < 0:
-        return None, None, None, None, None, None, None
-    
+   
     wast    = math.sqrt(stress/pe) 
     s       = wast/(k*he)    
     
-
-    riw = glin*he/((wast**2))
-    frw  = 1/(riw**2)
-    hast = wast**2/glin
-    umal = wast**2/(2*he*math.sqrt(glin*(H-he)))
+    try:
+        riw = glin*he/((wast**2))
+        frw  = 1/(riw**2)
+        hast = wast**2/glin
+        umal = wast**2/(2*he*math.sqrt(glin*(H-he)))
+        
+    except RuntimeWarning:
+        riw,frw,hast,umal = None, None, None, None
     
     return stress, wast, s, riw, frw, hast, umal
 
@@ -645,14 +696,10 @@ def wind_para2d(w,rw,qt,h,pe,H,n2d,hmid,p,glin):
 
         win_stress = wind_stress(w)
         
-        if win_stress < 0:
-            riw2d[z] = None
-            s2d[z]   = None
-        else:
-            k       = 0.4   #Von Karman's constant 
-            wast      = math.sqrt(win_stress/media(p[z+1],p[z]))
-            s2d[z]    = wast/(k*hmid[z]) 
-            riw2d[z] =  (glin[z]*( H - hmid[z]))/((wast**2))                  
+        k       = 0.4   #Von Karman's constant 
+        wast      = math.sqrt(win_stress/media(p[z+1],p[z]))
+        s2d[z]    = wast/(k*hmid[z]) 
+        riw2d[z] =  (glin[z]*( H - hmid[z]))/((wast**2))                  
     
     return s2d, riw2d
 
@@ -679,7 +726,7 @@ def wedderburn(glin,he,wast,ls):
     # he     = Depth/thickness of the Epilimnion end (m)
     # ls     = system fetch length (m)  
     
-    if wast == 0:
+    if wast == 0 or glin == 0:
         wedd = None
     else:
         wedd = glin*he**2/(ls*wast**2)
@@ -689,22 +736,22 @@ def wedderburn(glin,he,wast,ls):
 # Parameters that dont use wind data 
 # -----------------------------------------------------------------------------
 
-def structure2layer(qt,h,tau,sal,pre,H):
+def structure2layer(qt,h,tau,sal,pre,H,z0):
     
     # glin = Reduced gravity (m/s²)
     # N    = Bouyancy frequency  (1/s or Hz)
+
+    he,hh,pe,ph,pu, pd = density_2layer(qt,h,tau,sal,pre,H,z0)
     
-    
-    he,hh,pe,ph,pu, pd = density_2layer(qt,h,tau,sal,pre,H)
-    glin   = abs(9.81*(ph-pe)/ph) 
-    n    = math.sqrt(glin/he)    
-    
+    glin   = abs(9.81*(ph-pe)/ph)  
+       
+    n    = math.sqrt(glin/he)
     
     return he,hh,pe,ph, glin, n,pu,pd
 
-def structure3layer(qt, h, tau, sal, pre, minval, H):
+def structure3layer(qt, h, tau, sal, pre, minval, H, z0):
     
-    h1,h2,h3,p1,p2,p3 = density_3layer(qt, h, tau, sal, pre, minval, H)
+    h1,h2,h3,p1,p2,p3 = density_3layer(qt, h, tau, sal, pre, minval, H, z0)
     
     return h1,h2,h3,p1,p2,p3
 
@@ -888,7 +935,7 @@ def class_generation (riw,hh,he,ls):
     #    3 = Internal seiche is dominant
     #    4 = Internal seiche with short amplitude.
     #
-
+    
     aux1 = math.sqrt((hh+he)/he)
     
     if riw < 1:
@@ -935,7 +982,7 @@ def mask (serie):
 def welch_method(serie,windsize,window, dt):
     
     if (windsize == 0):
-        janela =  72*60*60 #seconds (window of 3 days = 72hours)
+        janela =  2*24*60*60 #seconds (window of 2 days)
     else:
         janela = windsize 
     
@@ -985,11 +1032,23 @@ def wave_spectral (si, dt, mother):
 
 
 
+def wavelet_spectral (si, dt, mother): 
+    
+
+    mom   = signal.ricker
+
+    l=len(si)
+    time  = np.arange(0,l) * dt
+    per   = np.arange(1,48)
+    
+    power = signal.cwt(si,mom,per)
+       
+    return time, per, power
+
 
 def coherence_shift(s1,s2,nfft,dt):
 
     # coherence
-
     fcoh, cxy = signal.coherence(s1, s2,  1/dt)
     px, pxy = signal.csd(s1, s2, 1/dt)
 
@@ -1021,28 +1080,14 @@ def butter_bandpass(lowcut, highcut, fs, order):
 
 
 
-def butter_bandpass_filter(data, lowcut, highcut, fs,  order):
+def butter_bandpass_filter(data, lowcut, highcut, fs):
 
-    
-    b, a   = butter_bandpass( lowcut, highcut, fs, order=order)
+    data   = data - np.mean(data)
+    b, a   = butter_bandpass( lowcut, highcut, fs, 4)
     f = signal.lfilter(b, a, data)
     
     return f
 
-
-def subclass(iw):
-    
-    
-    if(iw<0.080):
-        iwi = 'Small amplitude internal wave'
-    elif(iw<0.333):
-        iwi = 'Sigmoidal internal wave'
-    elif(iw<1.25):
-        iwi = 'Non linear internal wave'
-    else:
-        iwi = 'Strong mixing caused by internal wave'
-        
-    return iwi
 
 def amplitude_average(iw,he,wedd):
     
@@ -1062,6 +1107,16 @@ def amplitude_average(iw,he,wedd):
     return average, ratio
 
 
+def spigel(he,W):
+    
+    return 0.4996*he/W
+
+def bueno(he,hh,W):
+    
+    f = 0.76 - 0.52*he/(hh+he)
+    k = 0.40
+    
+    return f*he/(1+np.exp(k*W)) 
     
 
 
