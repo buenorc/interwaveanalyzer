@@ -47,7 +47,7 @@ def comparison_definition(c):
   
 def commission(tau,sal,pre):
     
-    #Intergovernmental Oceanographic Commission (2010)
+    # Intergovernmental Oceanographic Commission (2010)
     # rho = f(T(°C),S(g/kg),P(dbar))
     #  2 < sal < 42
     #  0 < pre < 1,000 decibars
@@ -111,7 +111,6 @@ def density_state(qt,tau,sal,pre):  # water density profile
 # Conversion functions
 # -----------------------------------------------------------------------------
 
-
 def depthmean(depth):
     
     hmean = np.zeros(len(depth[0]),float)
@@ -138,14 +137,6 @@ def vector_time (a,j,ni):
         b[i] = a[i][j]
     return b
 
-def keepout (angle):
-    if angle < 90:
-        angle = angle + 180 
-    else :
-        if angle > 270 : 
-            angle = angle - 180 
-    
-    return angle
 
 def ciout(x):
     
@@ -195,18 +186,20 @@ def velocityten(wz,z):
     
     l = len(wz)
     w10  = np.zeros(l,float)
+    
+    if z == 10:
+        return wz
        
     for t in range(l):
         
-       Cd = 1.3*10**-3
-       wind  = wz[t]*(1-math.sqrt(Cd)*exp/k)**-1
+        if wz[t] < 5:
+            Cd = 0.0010
+        else:
+            Cd = 0.0015
         
-       if wind >= 5.0 :
-            Cd = 1.5*10**-3 
-            w10[t]  = wz[t]*(1-math.sqrt(Cd)*exp/k)**-1
-       else:
-            Cd  = 1.0*10**-3 #drag coefficient
-            w10[t]  = wz[t]*(1-math.sqrt(Cd)*exp/k)**-1
+        wind = wz[t]/(1-np.sqrt(Cd)/k*exp) 
+
+        w10[t] = wind
     
     return w10
 
@@ -318,15 +311,38 @@ def interpolation(y1,y2,x1,x2,x,exc,auxiso):
         
             return auxiso                       
 
-
-def wind_average(wd,ws):
-   # wind direction average  
-    V_east = np.average(np.sin(wd * np.pi/180))
-    V_north = np.average(np.cos(wd * np.pi/180))
-    mean_wd = np.arctan2(V_east, V_north) * 180/np.pi
-    mean_wd = (360 + mean_wd) % 360
+def windbar_fetch(dw_mean,linang,angle,dists):
     
-    return mean_wd
+    Ldist = np.zeros(len(angle),float)
+    
+    dw_min, dw_max = wind_angle(dw_mean,linang)
+    
+    for i in range(len(angle)):
+        if dw_max < dw_min:
+            if angle[i] < dw_max or angle[i] > dw_min :
+                Ldist[i] = dists[i]
+            else:
+                Ldist[i] = None
+                
+        else:
+            if angle[i] > dw_min and angle[i] < dw_max:
+                Ldist[i] = dists[i]
+            else:
+                Ldist[i] = None
+    
+    return Ldist
+
+def wind_average(wd,iw):
+   # wind direction average  
+
+    u_east  = np.average(iw*np.sin(np.deg2rad(wd)))
+    u_north = np.average(iw*np.cos(np.deg2rad(wd)))
+
+    mean   = (np.arctan2(u_east, u_north)) * 180/np.pi
+    mean  = (360+mean)%360
+
+    
+    return mean
     
 def depths(profile, depth, lin):
 
@@ -376,7 +392,7 @@ def isotherms (reqt, qt, h,tau,zmax,zmin,aux_iso):
     
 
 # -----------------------------------------------------------------------------
-# Methods to identify Thermocline/Halocline/Pycnocline
+# Methods to identify the thermocline
 # -----------------------------------------------------------------------------
 
 def thermo_region (qt,h,tau,sal,pre):
@@ -548,8 +564,8 @@ def density_2layer (qt,h,tau,sal,pre,H,z0):
         
     pe = pe/npe     # epilimnion average density       
     ph = ph/nph     # hipolimnion average density
-    pu = p[0]       # superficial density (first sensor = 1m from the top)
-    pd = p[qt-1]    # bottom density (last sensor = 2m from the bottom)
+    pu = p[0]       # superficial density 
+    pd = p[qt-1]    # bottom density 
     
     return he, hh, pe, ph, pu, pd
 
@@ -580,23 +596,24 @@ def density_3layer (qt,h,tau,sal,pre,minval,H,z0):
             if(ze < h[z]):
                p1   =  p1 + p[z]
                np1  =  np1 +  1
-            else:
-                
+               
+            else:                
                 if(zh < h[z]):
                    p2   =  p2 + p[z]
                    np2  =  np2 +  1
                 
                 else:
                    p3   =  p3 + p[z]
-                   np3  =  np3 +  1           
-                   
+                   np3  =  np3 +  1                                     
         p1 = p1/np1
 
+                
         if np3 == 0:
-            p3 = p2
+            p3 = p[-1]
         else:
             p3 = p3/np3
-        
+
+            
         if np2 == 0:
             p2 = (p1+p3)/2
         else:
@@ -613,10 +630,10 @@ def density_3layer (qt,h,tau,sal,pre,minval,H,z0):
 # Parameters that use wind data 
 # -----------------------------------------------------------------------------
 
-def wind_angle(wind_mean,wind_limit):
+def wind_angle(wind,wind_limit):
     
-    dw_max = wind_mean + wind_limit
-    dw_min = wind_mean - wind_limit
+    dw_max = wind + wind_limit
+    dw_min = wind - wind_limit
 
     if (dw_max > 360):
         dw_max = dw_max - 360
@@ -626,6 +643,8 @@ def wind_angle(wind_mean,wind_limit):
     
     return dw_min, dw_max
 
+
+
 def wind_stress(w):
     # wind stress (N/m² or Pa)
     # w: wind velocity at 10 meters above the water surface
@@ -633,12 +652,12 @@ def wind_stress(w):
     #
     
     if(w > 5):
-        Cd = 1.5*10**-3  # drag coefficient
+        Cd = 0.0015  # drag coefficient
     else:
-        Cd = 1.0*10**-3
+        Cd = 0.0010
         
         if (w == 0.0): # low wind to characterize the stability of the lake
-            w = 0.1
+            w = 0.01
             
     
     rho_air = 1.225 # density of the air (kg/m³)
@@ -1073,9 +1092,9 @@ def butter_bandpass(lowcut, highcut, fs, order):
     high = highcut / nyq
     
 
-    b, a = signal.butter(order,[low, high], btype='band')
+    sos = signal.butter(order,[low, high], analog=False, btype='band', output='sos')
 
-    return b, a
+    return sos
 
 
 
@@ -1083,8 +1102,8 @@ def butter_bandpass(lowcut, highcut, fs, order):
 def butter_bandpass_filter(data, lowcut, highcut, fs):
 
     data   = data - np.mean(data)
-    b, a   = butter_bandpass( lowcut, highcut, fs, 4)
-    f = signal.lfilter(b, a, data)
+    sos   = butter_bandpass( lowcut, highcut, fs, 4)
+    f = signal.sosfilt(sos, data)
     
     return f
 

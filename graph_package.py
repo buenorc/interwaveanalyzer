@@ -294,7 +294,7 @@ def multi_isotherms(date, y, iso, time,ax):
 
 def temp_bandpass(date, y, iso, ax):
     
-    color=['deepskyblue','dodgerblue','royalblue','darkblue']
+    color= ['red','maroon','blue','navy']
     
     for i in range(4):
         if iso[i]!=-999:
@@ -311,11 +311,21 @@ def temp_bandpass(date, y, iso, ax):
     
     ax.grid(True,which="both",color='black',ls=":",lw=0.25)
     ax.legend( loc='upper right', prop={'size': 9})
-    ax.set_ylabel('depth (m)')  
+    ax.set_ylabel('displacement (m)')  
 
+def nauticaldefinition(dw):
+
+    dw = dw + 180
+    dw = np.where(dw > 360, dw-360, dw)
+    
+    return dw
 
 
 def wind_rose(ws,wd):
+    
+    wd = wd + 180
+    wd = np.where(wd > 360, wd-360, wd) # nautica definition to wind direction
+    
     
     ax = WindroseAxes.from_ax()
     rounda = int(max(ws))+1
@@ -837,13 +847,13 @@ def radiation(date,t,y,ax):
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%d'))
     ax.set_ylabel('solar rad.(W/m²)')
     
-def wind_direction(date,time,y,ys,ylow,ydi,ax):
+def wind_direction(date,time,y,ys,ylow,ydi,wedd_up,wedd_low,ax):
 
-    ax.scatter(date, ydi, color='blue', marker='x', label ='homo. dir.')
+    ax.plot(date, ydi, c='blue', linewidth=3, ls='-', label ='homogeneous wind events')
     
     ax.plot(date, y, linewidth=1, c='lightgray', ls='-')
-    ax.plot(date, ys, linewidth=1, c='green', ls='-',label='W < 100')
-    ax.plot(date, ylow, linewidth=1, c='red', ls='-', label='W < 20')
+    ax.plot(date, ys, linewidth=1, c='green', ls='-',label=str(round(wedd_up,1))+'< W < '+str(round(wedd_low,1)))
+    ax.plot(date, ylow, linewidth=1, c='red', ls='-', label=str(round(min([wedd_up,1]),1))+'< W < 20')
     
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
     ax.set_ylabel('wind direction ($^{\circ}$)',color='gray') 
@@ -1275,3 +1285,15 @@ def densi_sensitivity(xp,per,rho,labelx,ax):
 
         
     ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    
+    
+def parabar_sensitivity(x,per,typ,ax):
+    
+    ax.plot(x, per, linewidth=1, c='navy', ls='-')
+    
+    if typ == 'dep':
+        ax.set_ylabel('period (h)')
+        ax.set_xlabel(r'$\bar{H}^{-1/2}$')
+    elif typ == 'rho':
+        ax.set_xlabel(r'$ (\rho_h/\Delta\rho)^{1/2}$')
+

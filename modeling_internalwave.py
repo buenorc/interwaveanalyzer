@@ -28,9 +28,10 @@ def biquadratic(L,he,hh,gamma,m):
 
     delta = ma.pow(q,2) - 4*p*r
     
-
-    omega = np.sqrt((-q-np.sqrt(delta))/(2*p))
-
+    try:
+        omega = np.sqrt((-q-np.sqrt(delta))/(2*p))
+    except RuntimeWarning:
+        return None
     
     peri  = 2*np.pi/omega
     
@@ -108,7 +109,7 @@ def disp_xmodel2(p1,p2,h1,h2,L,m):
     solv = np.linalg.eigvals(A)
     #sorted(solv)
 
-    peri_min = eigen2_values(L[0],solv[0],m)
+    peri_min =  (L[0],solv[0],m)
     peri_ave = eigen2_values(L[1],solv[0],m)
     peri_max = eigen2_values(L[2],solv[0],m)  
     
@@ -183,3 +184,76 @@ def coriolis_effect(fo,to):
     
     return t 
     
+
+def sensitivity_2layer(mean,diff,N,pe,ph,he,hh,fetch,typ):
+    
+    x   = np.linspace(mean-diff, mean+diff, N)
+    period = np.zeros((N),float)
+
+    for i in range(N):
+        
+        if   typ == 1:
+            _,per,_  = np.array(disp_zmodel(x[i], ph, he, hh,fetch,1))
+        elif typ == 2:
+            _,per,_  = np.array(disp_zmodel(pe, x[i], he, hh,fetch,1))
+        elif typ == 3:
+            _,per,_  = np.array(disp_zmodel(pe, ph, x[i], hh,fetch,1))
+        elif typ == 4:
+            _,per,_  = np.array(disp_zmodel(pe, ph, he, x[i],fetch,1))            
+            
+        period[i] = per     
+        
+    return x, period/60/60  # period in hours
+
+def sensitivity_3layer(mean,diff,N,p1,p2,p3,h1,h2,h3,fetch,typ):
+    
+    aux = mean - diff
+    x   = np.linspace(aux, mean+diff, N)
+    period = np.zeros((N),float)
+
+    for i in range(N):
+
+        if   typ == 1:
+            _,per,_  = np.array(disp_xmodel3(x[i],p2,p3,h1,h2,h3,fetch,2,1))
+        elif typ == 2:
+            _,per,_  = np.array(disp_xmodel3(p1,x[i],p3,h1,h2,h3,fetch,2,1))
+        elif typ == 3:
+            _,per,_  = np.array(disp_xmodel3(p1,p2,p3,x[i],h2,h3,fetch,2,1))
+        elif typ == 4:
+            _,per,_  = np.array(disp_xmodel3(p1,p2,p3,h1,x[i],h3,fetch,2,1))
+                
+        period[i] = per     
+        
+    return x, period/60/60  # period in hours
+
+
+def sensitivity_dimension(L, pe,ph, he, hh):
+    
+    N    = 50
+    g    = 9.81
+    drho = 4.00
+    ddep = 0.10
+    
+    
+    mean_rho = np.sqrt(ph/(ph-pe)) 
+    mean_dep = np.sqrt((he+hh)/(he*hh))
+    
+    aux_rho  = mean_rho - drho
+    aux_dep  = mean_dep - ddep
+    
+    xrho   = np.linspace(aux_rho, mean_rho+drho, N)
+    xdep   = np.linspace(aux_dep, mean_dep+ddep, N)
+    
+    yrho   = np.zeros((N),float)
+    ydep   = np.zeros((N),float)
+    
+    Crho = 2*L/np.sqrt(g*he*hh/(he+hh))  
+    Cdep = 2*L/np.sqrt(g*(ph-pe)/ph)
+
+    for i in range(N):
+        
+        yrho[i] = Crho*xrho[i]
+        ydep[i] = Cdep*xdep[i]
+        
+               
+    return xrho, xdep, yrho/60/60, ydep/60/60  # period in hours

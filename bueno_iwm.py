@@ -199,8 +199,6 @@ def main():
     
     os.remove('temporary.txt')
 
-    autoff_wsuser = 0
-
     root.update()
 # -----------------------------------------------------------------------------
 # LOAD DATA FROM FILE
@@ -312,14 +310,6 @@ def main():
 
 
 # model sensibility 
-    v1h1_she = np.zeros((lh_sen),float)
-    v1h1_shh = np.zeros((lh_sen),float)
-    v1h1_spe = np.zeros((lp_sen),float)
-    v1h1_sph = np.zeros((lp_sen),float)
-    v2h1_sh2 = np.zeros((lh_sen),float)
-    v2h1_sp2 = np.zeros((lp_sen),float)
-    v3h1_sh3 = np.zeros((lh_sen),float)
-    v3h1_sp3 = np.zeros((lp_sen),float)
 
     v1mode   = np.zeros((lin),float) 
     v2mode   = np.zeros((lin),float) 
@@ -328,9 +318,9 @@ def main():
     sdur  = np.zeros((lin),float) # wind stress with duration filter
     sdir  = np.zeros((lin),float) # wind stress with duration and direction
 
-    newdw = np.zeros((lin),float) # wind direction for friction velocity of win
-    newdi = np.zeros((lin),float)
-    newdw_low = np.zeros((lin),float)
+    dw_hom  = np.zeros((lin),float)
+    dw_lit = np.zeros((lin),float)  # Wedderburn number according to literature criteria (wind direction)
+    dw_spi  = np.zeros((lin),float) # Wedderburn number according to Spigel et al. (wind direction)
     
     ridu = np.zeros((lin),float) # Ri with duration filter
     ridi = np.zeros((lin),float) # Ri
@@ -350,10 +340,8 @@ def main():
     root.update()   
 # --------------------- Compute the wind fetch [min, ave, max] ----------------
 
-    iw           = mod.velocityten(wind, rw)          # convert wind for 10 m high
-    dw_mean      = mod.wind_average(dw,iw)
-
-    dw_min, dw_max = mod.wind_angle(dw_mean,linang)
+    iw       = mod.velocityten(wind, rw)      # convert wind for 10 m high   
+    dw_mean  = mod.wind_average(dw,iw)
     
     hmean        = mod.depthmean(h)
 
@@ -361,15 +349,23 @@ def main():
 # if basin is selected as integer, it is considered a variation of \pm 5% 
     if type_length == 1: 
         ls_fetch = [len_basin, 0.95*len_basin, 1.05*len_basin]
+                       
     elif type_length == 2:
-        ls_fetch = [dists[mod.find_nearest(angle,dw_mean)], dists[mod.find_nearest(angle,mod.keepout(dw_min))], dists[mod.find_nearest(angle,mod.keepout(dw_max))]]
-
-    ls_min = np.min(ls_fetch)
-    ls_max = np.max(ls_fetch)
-    ls_ave = np.average(ls_fetch)    
-
-    ls_fetch = [ls_min,ls_ave,ls_max]   
-
+        
+       Lw_cont  = mod.windbar_fetch(dw_mean,linang,angle,dists)
+       
+       try:
+           ls_min = np.nanmin(Lw_cont)
+           ls_max = np.nanmax(Lw_cont)
+           ls_ave = np.nanmean(Lw_cont)
+           
+           ls_fetch = [ls_min,ls_ave,ls_max]  
+           
+       except :
+           ls_near  = dists[mod.find_nearest(angle,dw_mean)]
+           ls_fetch = [ls_near,ls_near,ls_near]  
+    
+           
 # -----------------------------------------------------------------------------
 
     consecutive_dire, consecutive_wind, ver_dire, ver_wind = 0,0,0,0
@@ -401,10 +397,10 @@ def main():
     
         auxiw  = iw[t]
         
-        
-        if auxiw == 0:
-            if t > 0 and t < lin-1:
-                auxiw = (iw[t+1]+iw[t-1])/2
+#retirar ?        
+#        if auxiw == 0:
+#            if t > 0 and t < lin-1:
+#                auxiw = (iw[t+1]+iw[t-1])/2
 
         auxean = ean[t]
 
@@ -431,7 +427,7 @@ def main():
     
     
     # 2layer structure
-        he[t], hh[t], pe[t], ph[t], glin[t], n[t], pu[t], pd[t] = mod.structure2layer(qt, auxh, auxtem, sal, pre, auxean, z0)      
+        he[t], hh[t], pe[t], ph[t], glin[t], n[t], pu[t], pd[t] = mod.structure2layer(qt, auxh, auxtem_ordered, sal, pre, auxean, z0)      
     
         ht[t] = ean[t] - he[t]
         hH[t] = he[t]/(he[t]+hh[t])
@@ -468,43 +464,53 @@ def main():
             tbsiw = None
             
             
-        newdi[t] = None
-        newdw_low[t] = None
+        dw_hom[t] = None
+        
+        max_spigel = ls_fetch[1]*(he[t]+hh[t])/(4*he[t]*hh[t])
+        min_spigel  =0.5*np.sqrt((he[t]+hh[t])/(he[t]*hh[t]))
+        
+        wedd_aux   = 1
+        
+        if min_spigel < 1:             # verify the minimum W for IW activity
+            wedd_aux = min_spigel
+            
+        if(wedd[t] < 20 and wedd[t] > wedd_aux ):
+            dw_lit[t] = dw[t]
+        else:
+            dw_lit[t] = None
     
-        if(wedd[t] < 20):
-            newdw_low[t] = dw[t]
-    
-        if(wedd[t]<100):
-
-            newdw[t] = dw[t]
+        if (wedd[t] < max_spigel) and (wedd[t] > min_spigel):
+            dw_spi[t] = dw[t]
         
             if(consecutive_wind > 0):
                 wmin, wmax = mod.wind_angle(dw[t-1],linang)
-                if( dw[t] >= wmin and dw[t] <= wmax):
-                    if(consecutive_dire==0):
-                        tindex = t
+                
+                if wmin > wmax:
+                    if( dw[t] >= wmin or dw[t] <= wmax):
+
                         consecutive_dire = consecutive_dire + 1
+                        dw_hom[t] = 357
 
                     else:
-                        dexmin, dexmax = mod.wind_angle(dw[tindex],linang)
-                        if(dw[t] >= wmin and dw[t] <= wmax):
-                            consecutive_dire = consecutive_dire + 1
-                            newdi[t] = dw[t]
-                        else:
-                            if(consecutive_dire > ver_dire):
-                                ver_dire = consecutive_dire
-                            consecutive_dire = 0
-                            
-                else:
-                    if(consecutive_dire > ver_dire):
-                        ver_dire = consecutive_dire
+                        if(consecutive_dire > ver_dire):
+                            ver_dire = consecutive_dire
                 
-                    consecutive_dire = 0
+                        consecutive_dire = 0                
+                else:                    
+                    if( dw[t] >= wmin and dw[t] <= wmax):
+                    
+                        consecutive_dire = consecutive_dire + 1
+                        dw_hom[t] = 357
+                        
+                    else:
+                        if(consecutive_dire > ver_dire):
+                            ver_dire = consecutive_dire
+                
+                        consecutive_dire = 0                              
         
             consecutive_wind = consecutive_wind + 1 
         
             if (consecutive_wind > ver_wind):
-#                indiwind = t                 # last sample of the main wind 
                 ver_wind = consecutive_wind  # number of samples of main wind
             
             if(consecutive_dire > ver_dire):
@@ -514,7 +520,7 @@ def main():
 
             consecutive_dire = 0
             consecutive_wind = 0
-            newdw[t] = None
+            dw_spi[t] = None
         
     # 3layer structure    
         h1[t],h2[t],h3[t],p1[t],p2[t],p3[t] = mod.structure3layer(qt, auxh, auxtem, sal, pre, minval, auxean, z0)
@@ -542,10 +548,12 @@ def main():
         _,v1mode[t],_ = np.real(miw.disp_xmodel2(pe[t],ph[t],he[t],hh[t],ls_fetch,1))
         _,v2mode[t],_ = np.real(miw.disp_xmodel3(p1[t],p2[t],p3[t],h1[t],h2[t],h3[t],ls_fetch,2,1))
     
-        if(t>0 and abs(v2mode[t] - v2mode[t-1])>5*60*60):
     # it is difficult occurs a change in this order (5h in a short dt)
+        if(t>0 and abs(v2mode[t] - v2mode[t-1])>5*60*60):
             v2mode[t] = v2mode[t-1]
-  
+
+        if(t>0 and abs(v1mode[t] - v1mode[t-1])>5*60*60):
+            v1mode[t] = v1mode[t-1]  
 
 
     iso = [isoa, isob, isoc, isod]
@@ -598,10 +606,13 @@ def main():
     m_riw  = np.nanmean(riw)
     m_ht   = np.nanmean(ht)
     
+    wedd_lim_lower = np.nanmean(ls_fetch[1]*(m_he+m_hh)/(4*m_he*m_hh))
+    wedd_lim_upper = 0.5*np.sqrt((m_he+m_hh)/(m_he*m_hh))
+    
     try:
-        m_newind = np.nanmean(newdw)
+        m_dw_spi= np.nanmean(dw_spi)
     except RuntimeWarning:
-        m_newind = -999
+        m_dw_spi = -999
 
 
     print (">         Parameters were defined")
@@ -655,11 +666,12 @@ def main():
 
 # theoretical periods
 
+
     pzv1h1 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,1))
 
-    pxv1h1 = np.array(miw.disp_xmodel2(m_pe,m_ph,m_he,m_hh,ls_fetch,1))
-    pxv1h2 = np.array(miw.disp_xmodel2(m_pe,m_ph,m_he,m_hh,ls_fetch,2))
-    pxv1h3 = np.array(miw.disp_xmodel2(m_pe,m_ph,m_he,m_hh,ls_fetch,3))
+    pxv1h1 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,1))
+    pxv1h2 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,2))
+    pxv1h3 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,3))
 
     pxv2h1 = np.array(miw.disp_xmodel3(m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,2,1))
     pxv2h2 = np.array(miw.disp_xmodel3(m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,2,2))
@@ -669,9 +681,12 @@ def main():
     pxv3h2 = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,2))
     pxv3h3 = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,3))
 
+
+
 #  internal wave frequency (without and with Earth rotation effect)
     fz_11  = 1/pzv1h1
 
+        
     omega_e = 7.291*10**-5
     lat_rad = np.radians(lat)
 
@@ -685,78 +700,19 @@ def main():
     fx_31, cfx31  = 1/pxv3h1, 1/miw.coriolis_effect(fc,pxv3h1)
 
 # model sensitivity using the hydrostatic model
-    aux_he = m_he - ddep
-    xhe    = np.linspace(aux_he, m_he+ddep, lh_sen)
+    
+    xpe, v1h1_spe = miw.sensitivity_2layer(m_pe,drho,lp_sen,m_pe,m_ph,m_he,m_hh,ls_fetch,1)
+    xph, v1h1_sph = miw.sensitivity_2layer(m_ph,drho,lp_sen,m_pe,m_ph,m_he,m_hh,ls_fetch,2)
+    xhe, v1h1_she = miw.sensitivity_2layer(m_he,ddep,lh_sen,m_pe,m_ph,m_he,m_hh,ls_fetch,3)  
+    xhh, v1h1_shh = miw.sensitivity_2layer(m_hh,ddep,lh_sen,m_pe,m_ph,m_he,m_hh,ls_fetch,4)
 
-    for i in range(lh_sen):
-        _,aux,_     = np.array(miw.disp_xmodel2(m_pe,m_ph,aux_he,m_hh,ls_fetch,1))
-        v1h1_she[i] = aux/60/60
-        aux_he      = aux_he + 0.01
+    xp1, v2h1_sp1 = miw.sensitivity_3layer(m_p1,drho,lp_sen,m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,typ=1)
+    xp2, v2h1_sp2 = miw.sensitivity_3layer(m_p2,drho,lp_sen,m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,typ=2)
+    xh1, v2h1_sh1 = miw.sensitivity_3layer(m_h1,ddep,lp_sen,m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,typ=3)
+    xh2, v2h1_sh2 = miw.sensitivity_3layer(m_h2,drho,lp_sen,m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,typ=4)
 
-
-    aux_hh = m_hh - ddep
-    xhh    = np.linspace(aux_hh, m_hh+ddep, lh_sen)
-
-    for i in range(lh_sen):
-        _,aux,_     = np.array(miw.disp_xmodel2(m_pe,m_ph,m_he,aux_hh,ls_fetch,1))
-        v1h1_shh[i] = aux/60/60
-        aux_hh      = aux_hh + 0.01
-
-
-    aux_pe = m_pe - drho
-    xpe    = np.linspace(aux_pe, m_pe+drho, lp_sen)
-
-    for i in range(lp_sen):
-        _,aux,_     = np.array(miw.disp_xmodel2(aux_pe,m_ph,m_he,m_hh,ls_fetch,1))
-        v1h1_spe[i] = aux/60/60
-        aux_pe      = aux_pe + 0.01
-
-
-    aux_ph = m_ph - drho
-    xph    = np.linspace(aux_ph, m_ph+drho, lp_sen)
-
-    for i in range(lp_sen):
-        _,aux,_     = np.array(miw.disp_xmodel2(m_pe,aux_ph,m_he,m_hh,ls_fetch,1))
-        v1h1_sph[i] = aux/60/60
-        aux_ph      = aux_ph + 0.01
-
-
-    aux_h2 = m_h2 - ddep
-    xh2    = np.linspace(aux_h2, m_h2+ddep, lh_sen)
-
-    for i in range(lh_sen):
-        _,aux,_     = \
-        np.array(miw.disp_xmodel3(m_p1,m_p2,m_p3,m_h1,aux_h2,m_h3,ls_fetch,2,1))
-        v2h1_sh2[i] = aux /60/60
-        aux_h2      = aux_h2 + 0.01
-
-
-    aux_p2 = m_p2 - drho
-    xp2    = np.linspace(aux_p2, m_p2+drho, lp_sen)
-
-    for i in range(lp_sen):
-        _,aux,_     = np.array(miw.disp_xmodel3(m_p1,aux_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,2,1))
-        v2h1_sp2[i] = aux /60/60
-        aux_p2      = aux_p2 + 0.01
-
-
-    aux_nh3 = nh3 - ddep
-    xh3     = np.linspace(aux_nh3, nh3+ddep, lh_sen)
-
-    for i in range(lh_sen):
-        _,aux,_     = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,aux_nh3,nh4,ls_fetch,3,1))
-        v3h1_sh3[i] = aux /60/60
-        aux_nh3      = aux_nh3 + 0.01
-
-
-    aux_np3 = np3 - drho
-    xp3     = np.linspace(aux_np3, np3+drho, lp_sen)
-
-    for i in range(lp_sen):
-        _,aux,_     = np.array(miw.disp_xmodel4(m_p1,np2,aux_np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,1))
-        v3h1_sp3[i] = aux /60/60
-        aux_np3      = aux_np3 + 0.01
-
+    rho_bar, dep_bar, Prho, Pdep = miw.sensitivity_dimension(ls_fetch[1], m_pe, m_ph, m_he, m_hh)
+ 
     print (">         Internal wave periods were estimated")
     root.update() 
 
@@ -795,6 +751,18 @@ def main():
 #
 
 # ------------------------------ spectral depth -------------------------------
+
+    if int(autoff_wsuser) == 1:
+        if pxv1h1[1] != None:   
+            windsizeuser = 10*pxv1h1[1]
+        else:
+            windsizeuser = 5*24*60*60
+            print (">         Warning: Due to model instability, Fourier")
+            root.update()  
+            print ('>                  averaging was changed to 5 days')
+            root.update()
+            print ('> ')
+            root.update()            
 
     sensor_filtered = []
     timee           = []
@@ -846,12 +814,7 @@ def main():
 #                                    corrected through the surface variation 
 #
 # -----------------------------------------------------------------------------
-                                   
-    if autoff_wsuser == 1:
-        if pxv2h1[1] != None:   
-            windsizeuser = 5*pxv1h1[1]
-        else:
-            windsizeuser = 5*24*60*60
+    
 
     if filter_process == 1 :        # define the range of the bandpass filter
         lowcut, highcut  = 1/((pxv1h1[2]/60)/60), 1/((pxv1h1[0]/60)/60)
@@ -1137,7 +1100,7 @@ def main():
                 plt.savefig(output_path+'iso'+str(i)+'.png', dpi = depi)
     
 
-    plt.figure(figsize=(10,7.5))
+    plt.figure(figsize=(8,6))
     
     ax1 = plt.subplot2grid((2,3),(0,0),colspan=2)
     ax2 = plt.subplot2grid((2,3),(1,0),colspan=2)
@@ -1159,7 +1122,7 @@ def main():
     plt.figure(figsize=(8,3))
 
     ax1 = plt.subplot2grid((1,1),(0,0))
-    graph.wind_direction(dx, time_win, dw, newdw,newdw_low,newdi,  ax1)
+    graph.wind_direction(dx, time_win, dw, dw_spi,dw_lit,dw_hom,wedd_lim_upper,wedd_lim_lower,ax1)
 
     plt.savefig(output_path+'temporal_analysis.png',dpi = depi)
 
@@ -1225,7 +1188,7 @@ def main():
         plt.savefig(output_path+'psd_hydro_coriois.png', dpi = depi)
 
 
-        plt.figure(figsize=(6,6))
+        plt.figure(figsize=(8,8))
 
         ax1 = plt.subplot2grid((1,1),(0,0))
         
@@ -1316,7 +1279,7 @@ def main():
     plt.savefig(output_path+'richardson.png',dpi = depi)
 
 
-    plt.figure(figsize=(10,7.5))
+    plt.figure(figsize=(8,6))
 
     ax1 = plt.subplot2grid((3,2),(0,0))
     ax2 = plt.subplot2grid((3,2),(0,1),sharex=ax1)
@@ -1332,7 +1295,7 @@ def main():
 
     plt.savefig(output_path+'structure_thermo.png',dpi = depi)
 
-    plt.figure( figsize=(8,3.2))
+    plt.figure(figsize=(8,2.3))
 
     ax1 = plt.subplot2grid((1,1),(0,0))
 
@@ -1340,7 +1303,7 @@ def main():
     plt.savefig(output_path+'wind.png',dpi = depi)
 
 
-    plt.figure( figsize=(10,5))
+    plt.figure( figsize=(8,4))
 
     ax1 = plt.subplot2grid((1,1),(0,0))
 
@@ -1370,8 +1333,8 @@ def main():
 
     graph.depth_sensitivity(xhe,v1h1_she,r'$h_e$',0,ax1)
     graph.densi_sensitivity(xpe,v1h1_spe,r'$\rho_e$',0,ax2)
-    graph.depth_sensitivity(xhh,v2h1_sh2,r'$h_h$',1,ax3)
-    graph.densi_sensitivity(xph,v2h1_sp2,r'$\rho_h$',1,ax4)
+    graph.depth_sensitivity(xhh,v1h1_shh,r'$h_h$',1,ax3)
+    graph.densi_sensitivity(xph,v1h1_sph,r'$\rho_h$',1,ax4)
 
     plt.savefig(output_path+'sensitivity_v1h1.png', dpi = depi)
 
@@ -1388,14 +1351,28 @@ def main():
     ax3.set_title('(c)',loc='left')
     ax4.set_title('(d)',loc='left')
 
-    graph.depth_sensitivity(xh2,v2h1_sh2,r'$h_2$',0,ax1)
-    graph.densi_sensitivity(xp2,v2h1_sp2,r'$\rho_2$',0,ax2)
-    graph.depth_sensitivity(xh3,v3h1_sh3,r'$h_3$',1,ax3)
-    graph.densi_sensitivity(xp3,v3h1_sp3,r'$\rho_3$',1,ax4)
+    graph.depth_sensitivity(xh1,v2h1_sh1,r'$h_1$',0,ax1)
+    graph.densi_sensitivity(xp1,v2h1_sp1,r'$\rho_1$',0,ax2)
+    graph.depth_sensitivity(xh2,v2h1_sh2,r'$h_2$',1,ax3)
+    graph.densi_sensitivity(xp2,v2h1_sp2,r'$\rho_2$',1,ax4)
 
     plt.savefig(output_path+'sensitivity_multiv.png', dpi = depi)
 
-    
+
+    plt.figure(figsize=(8,4))
+
+    ax1 = plt.subplot2grid((1,2),(0,0))
+    ax2 = plt.subplot2grid((1,2),(0,1))
+
+    ax1.set_title('(a)',loc='left')
+    ax2.set_title('(b)',loc='left')
+
+    graph.parabar_sensitivity(dep_bar,Pdep,'dep',ax1)
+    graph.parabar_sensitivity(rho_bar,Prho,'rho',ax2)
+
+    plt.savefig(output_path+'sensitivity_barparameters.png', dpi = depi)
+
+
     plt.figure(figsize=(8,3))
 
     ax1 = plt.subplot2grid((1,1),(0,0))
@@ -1614,12 +1591,9 @@ def main():
     g1 =ImageReader(output_path+'windrose.png')
     canvas.drawImage(g1, 25, 190,width=250, height=250)
 
-    g2 =ImageReader(output_path+'structure.png')
-    canvas.drawImage(g2, 250, 450,width=300, height=225)
-
-    
+  
     g2 =ImageReader(output_path+'wind.png')
-    canvas.drawImage(g2, 250, 555,width=300, height=120)
+    canvas.drawImage(g2, 250, 555,width=300, height=86.25)
 
     g2 =ImageReader(output_path+'structure.png')
     canvas.drawImage(g2, 250, 405,width=300, height=150)
@@ -1629,7 +1603,7 @@ def main():
     canvas.drawString(280, 370, 'Duration of the strongest wind event:')
     canvas.drawString(460, 370,  str(round(dura/(60*60),2))+' h')
     canvas.drawString(280, 350, 'Just considering homogeneous direction:')
-    canvas.drawString(280, 335,  str(round(dire/(60*60),2))+' h blowing '+str(round(m_newind,0))+'° North')
+    canvas.drawString(280, 335,  str(round(dire/(60*60),2))+' h blowing '+str(round(m_dw_spi,0))+'° North')
     canvas.drawString(280, 315, 'Reduction factor:')
     canvas.drawString(380, 315, 'Duration factor:')
     canvas.drawString(460, 315,  str(round(fdura,3)))
