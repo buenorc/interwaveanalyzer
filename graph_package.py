@@ -15,7 +15,6 @@ import matplotlib.patches as mpatches
 from windrose import WindroseAxes
 from scipy.interpolate import BSpline
 from matplotlib import pyplot as plt
-from internal_module import interpol
 from matplotlib.ticker import FormatStrFormatter
 
 
@@ -60,6 +59,124 @@ def equation_three (H, x, dh):
     
     return resp
 
+
+def class_degeneration (fi,sy,ab,V,hh,he,delp,umax,ls,no,co,glin):
+#
+#   External Function: Classification Analysis
+#   Function to classify the degeneration of internal waves
+#
+#   input:  
+#   fi      input   Internal wave frequency considering a two layer system (Hz)   
+#   ab      input   Area of the boundary layer (m²)
+#   V       input   volume of the reservoir (m³)
+#   hi      input   Thickness of i-layer (m)
+#   dm      input   Thickness of the thermocline (m)
+#   umax    input   Maximum shear velocity (m/s)
+#   ls      input   System fetch length (m)
+#   no      input   Initial amplitude of the internal seiche (m)
+#   co      input   Velocity of the internal wave (m/s)
+#   glin    input   Reduced gravity (m/s²) 
+
+    
+    td = 1/dampingfreq(fi,ab,V,hh,he,delp,umax,ls)
+    ts = 1/steepingfreq(fi,he,hh,no,co,ls)
+    tk = 1/kelvinfreq(glin,no,delp,ls)
+    tb = 1/boresfreq(no,fi,he,hh) # mudar
+    
+    
+    if tb < 1/(4*fi):
+        return 1 # "internal bore will form."
+    else:
+        if td < ts :
+            if tk < 1/(4*fi) and tk < ts:    
+                return 2 # "Kelvin-Helmholtz billows will form."
+            else:
+                return 3 #"Internal seiches will be damped normally."
+        else:
+            return 4 #"Non-linear internal wave will form."
+    
+def boresfreq(no,fi,he,hh):
+    # 
+    # function to calculate the internal bores frequency (Hz)
+    # important: before to use this function, you need to calculate the 
+    #            internal wave frequency usng a two layers method.
+    #
+
+    aux = 4*no*fi/he
+    fb = aux * math.sqrt((math.pow(he,3)+math.pow(hh,3))/\
+                         ((hh+he)*math.pow(hh,2)))
+    return fb
+    
+def dampingfreq(fi,ab,V,hh,he,delp,umax,ls):
+    # 
+    # function to calculate the viscous damping frequency (Hz)
+    # important: before to use this function, you need to calculate the 
+    #            internal wave frequency usng a two layers method.
+    #
+    # input:  fi - internal wave frequency considering a two layer system (Hz) 
+    #         sy - system (0 to natural fild and 1 to lab experiment)
+    #         ab - area of the boundary layer (m²)
+    #         V  - volume of the reservoir (m³)
+    #         he and hh - thickness of the epi- and hypo-limnion (m)
+    #         delp - thickness of the thermocline (m)
+    #         umax - maximum shear velocity (m/s)
+    #         ls - system fetch length (m)
+    #
+    # output  fd - frequency per lenght unit (Hz)
+    #
+    # variables: 
+    #         nu - kinematic viscosity of the water at 20°C (m²/s)
+    #         H  - total depth - hh + he (m)   
+    #
+    nu = 1.00*10**-6 
+    
+    
+    delb   = umax*math.e/(471*math.sqrt(nu*fi))
+    alphad = ab*delb/(2*V)
+    
+    
+    fd= alphad*fi*ls
+    
+    return fd
+
+def steepingfreq(fi,he,hh,no,co,ls):
+    # 
+    # function to calculate the nonlinear steeping frequency-scale (Hz)
+    # important: before to use this function, you need to calculate the 
+    #            internal wave frequency usng a two layers method.
+    #
+    # input:  fi - internal wave frequency considering a two layer system (Hz) 
+    #         he and hh - thickness of the epi- and hypo-limnion (m)
+    #         no - initial amplitude of the internal seiche (m)
+    #         co - velocity of the internal wave (m/s)
+    #         ls - system fetch length (m)
+    #
+    # output  fs - frequency times lenght unit (Hz)
+    #  
+    #
+    
+    beta = 3*co*(he-hh)/(2*he*hh)
+    fs   = beta*no/ls
+    
+    return fs
+
+def kelvinfreq(glin,no,delp,ls):
+    # 
+    # function to calculate the Kelvin_helmholtz frequency-scale (Hz)
+    # important: before to use this function, you need to calculate the 
+    #            internal wave frequency usng a two layers method.
+    #
+    # input:  glin - reduced gravity (m/s²) 
+    #         no - initial amplitude of the internal seiche (m)
+    #         delp - thickness of the metalimnion (m)
+    #
+    # output  fkh - frequency times lenght unit (Hz)
+    #
+    
+    fkh = no*math.sqrt(glin/delp)/ls
+    
+    return fkh
+
 #-----------------------------------------------------------------------------
 
 def model_plot(freq_mode,col,typ,vert,hori,maxima,ax):
@@ -91,6 +208,7 @@ def period_err(freq,fra_min):
     
     per = (1/freq)/(60*60)  # hours
     
+
     ph = ma.trunc(per)                              # hour
     pm = ma.trunc((per-ph)*60)                      # minute
     
@@ -135,6 +253,18 @@ def value_nearest_vector(array,value,lim):
         
     return idx
 
+def interpolation(y1,y2,x1,x2,x):
+    # remember that this is the best and must be palced here! !!! 2020
+    if(x1==x2):
+        return abs(np.mean([y1,y2]))
+    
+    a = (y1-y2)/(x1-x2)
+    b = y1 - a*x1
+    
+    y = a*x + b
+    return y
+
+
 def correction_contourf(h,num,dj,lin,dci,limit):
     
     # interpolation function to plot a countourf graph 
@@ -156,7 +286,6 @@ def correction_contourf(h,num,dj,lin,dci,limit):
 
 
     countnh = len(nh)
-
     nnum = np.zeros((lin,le),float)   
 
     for t in range(lin):    
@@ -165,7 +294,7 @@ def correction_contourf(h,num,dj,lin,dci,limit):
             if nh[z] > h[t][i] or nh[z] < h[t][limit-1]:
                 nnum[t][z] = None
             else:
-                nnum[t][z] = interpol(num[t][i],num[t][i+1],h[t][i],h[t][i+1],nh[z])  
+                nnum[t][z] = interpolation(num[t][i],num[t][i+1],h[t][i],h[t][i+1],nh[z])  
             if i < (limit - 1): 
                 if nh[z] < h[t][i+1]:
                     i=i+1
@@ -355,17 +484,9 @@ def depth_bandpass(date, y, depth, time,s, ax):
     ax.set_ylabel('thermal variation (°C)')  
 
 
-def vector_time (a,j,ni):
-    
-    b =  np.zeros((ni),float)
-    
-    for i in range(ni):
-        b[i] = a[i][j]
-    return b    
     
 def thermal_variation(date,depth, depth_point, temp, time, zoom, ax):
     # this does not account the surface elevation 
-    points = len(time)
     
     #t_smooth, t_numeral, y_smooth = smooth_date(date,time,temp,points)  
     #ax.plot(t_smooth, y_smooth, linewidth=1, c='black', ls='-')
@@ -376,7 +497,7 @@ def thermal_variation(date,depth, depth_point, temp, time, zoom, ax):
         aux = depth[i]
         if aux[0] is not None:
             
-            d = vector_time (temp,depth_point[i],points)
+            d = temp[:,depth_point[i]]
 
             #t_smooth, t_numeral, y_smooth = smooth_date(date,time,d,points)  
             #ax.plot(t_smooth, y_smooth, linewidth=1, c=col[i], ls='-', label=str(round(np.nanmean(depth[i]),1))+' m') 
@@ -429,14 +550,17 @@ def psd_isoz(tau, freq, psd, zv1h1,largelen,n,fo, ax):
     maxima = 0
 
     for i in range(4):
-        if(tau[i]!=-999):        
+        if(tau[i]!=-999):       
+            ff = psd[i]
+            f  = freq[i]
+            
             if(largelen==1): 
-                l0 = int(len(psd[i])/150)
-                ax.plot(smooth(psd[i], l0), freq[i], linewidth=1, c=color[i], ls='-',label="iso "+str(tau[i])+"°C")
+                l0 = int(len(ff)/150)
+                ax.plot(smooth(ff, l0), f, linewidth=1, c=color[i], ls='-',label="iso "+str(tau[i])+"°C")
             else:
-                ax.plot(psd[i], freq[i], linewidth=1, c=color[i], ls='-', label="iso "+str(tau[i])+"°C")
+                ax.plot(ff, f, linewidth=1, c=color[i], ls='-', label="iso "+str(tau[i])+"°C")
                 
-            max_x = valmax(psd[i],freq[i])
+            max_x = valmax(ff,f)
             if(max_x > maxima):
                 maxima = max_x
         
@@ -488,12 +612,12 @@ def psd_multilayer(f,depth,ff,fi,n2,ax):
 
 
 
-def psd_depthz(sen, seu, matrix_depth, f , psd, zv1h1, largelen, n,fo,ax):
+def psd_depthz(sen, seu, matrix_depth, freq , psd, zv1h1, largelen, n,fo,ax):
 
     color = ['red','maroon','blue','navy']
     
     minimoy= 10**-6
-    maximoy= 10**-3 
+    maximoy= 10**-2
     
     maxima = 0
        
@@ -505,12 +629,15 @@ def psd_depthz(sen, seu, matrix_depth, f , psd, zv1h1, largelen, n,fo,ax):
         if(sen[i]==1):
             
             depth = np.nanmean(matrix_depth[i])
+            ff    = psd[seu[i]]
+            f     = freq[seu[i]]
+            
             if(largelen==1): 
-                ax.plot(smooth(psd[seu[i]], l10), f[seu[i]], linewidth=1, c=color[i], ls='-', label=str(round(depth,2))+" m")
+                ax.plot(smooth(ff, l10), f, linewidth=1, c=color[i], ls='-', label=str(round(depth,2))+" m")
             else:
-                ax.plot(psd[seu[i]], f[seu[i]], linewidth=1, c=color[i], ls='-', label=str(round(depth,2))+" m")
+                ax.plot(ff, f, linewidth=1, c=color[i], ls='-', label=str(round(depth,2))+" m")
         
-            max_x = valmax(psd[seu[i]],f[seu[i]])
+            max_x = valmax(ff,f)
             if(max_x > maxima):
                 maxima = max_x
     
@@ -551,19 +678,23 @@ def psd_isox(tau, freq, psd, xv1h1, xv2h1, xv3h1,largelen,n,fo, ax):
     
     color = ['red','maroon','blue','navy']
     minimoy= 10**-6
-    maximoy= 10**-3 
+    maximoy= 10**-2 
 
     maxima = 0
 
     for i in range(4):
-        if(tau[i]!=-999):        
-            if(largelen==1): 
-                l0 = int(len(psd[i])/150)
-                ax.plot(smooth(psd[i], l0), freq[i], linewidth=1, c=color[i], ls='-',label="iso "+str(tau[i])+"°C")
-            else:
-                ax.plot(psd[i], freq[i], linewidth=1, c=color[i], ls='-', label="iso "+str(tau[i])+"°C")
+        if(tau[i]!=-999):
+            
+            ff = psd[i]
+            f  = freq[i]
                 
-            max_x = valmax(psd[i],freq[i])
+            if(largelen==1): 
+                l0 = int(len(ff)/150)
+                ax.plot(smooth(ff, l0), f, linewidth=1, c=color[i], ls='-',label="iso "+str(tau[i])+"°C")
+            else:
+                ax.plot(ff, f, linewidth=1, c=color[i], ls='-', label="iso "+str(tau[i])+"°C")
+                
+            max_x = valmax(ff,f)
             if(max_x > maxima):
                 maxima = max_x
         
@@ -589,13 +720,13 @@ def psd_isox(tau, freq, psd, xv1h1, xv2h1, xv3h1,largelen,n,fo, ax):
     ax.set_xlim(right=10**ma.ceil(ma.log10(maxima)))
     ax.legend(loc='lower left')
 
-def psd_isox_depth(sen, matrix_depth, f, psd, xv1h1, xv2h1, xv3h1,largelen,n,fo, ax):
+def psd_isox_depth(sen, matrix_depth, freq, psd, xv1h1, xv2h1, xv3h1,largelen,n,fo, ax):
 
 
     color = ['red','maroon','blue','navy']
     
     minimoy= 10**-6
-    maximoy= 10**-3 
+    maximoy= 10**-2 
     
     maxima = 0
     
@@ -606,13 +737,16 @@ def psd_isox_depth(sen, matrix_depth, f, psd, xv1h1, xv2h1, xv3h1,largelen,n,fo,
         if(sen[i]==1):
             
             depth = np.nanmean(matrix_depth[i])
+            ff    = psd[i]
+            f     = freq[i]
+            
             
             if(largelen==1): 
-                ax.plot(smooth(psd[i], l0), f[i], linewidth=1, c=color[i], ls='-', label=str(round(depth,2))+" m")
+                ax.plot(smooth(ff, l0), f, linewidth=1, c=color[i], ls='-', label=str(round(depth,2))+" m")
             else:
-                ax.plot(psd[i], f[i], linewidth=1, c=color[i], ls='-', label=str(round(depth,2))+" m")
+                ax.plot(ff, f, linewidth=1, c=color[i], ls='-', label=str(round(depth,2))+" m")
         
-            max_x = valmax(psd[i],f[i])
+            max_x = valmax(ff,f)
             if(max_x > maxima):
                 maxima = max_x
 
@@ -640,7 +774,7 @@ def psd_isox_depth(sen, matrix_depth, f, psd, xv1h1, xv2h1, xv3h1,largelen,n,fo,
 
 def psd_wind(period,psd_wind,ax):
 
-    ax.plot(psd_wind, period, linewidth=1, c='navy', ls='-')
+    ax.plot(psd_wind[1:], period[1:], linewidth=1, c='navy', ls='-')
     
     ax.set_yscale('log')
     ax.set_xscale('log')
@@ -667,19 +801,14 @@ def psd_sola(period,psd_sola,ax):
 
 def coherence (c1w,c1r,f1w,f1r,tau,iso, largelen,ax):
     
-    f1w = f1w/60/60 # hour to second
-    f1r = f1r/60/60 # hour to second
     
     l10 = int(len(c1w)/100)
     
     if largelen==1:
-        ax.plot(smooth(c1w,l10), f1w, linewidth=1, c='navy', ls='-', \
-                label='cohe wind')
-        ax.plot(smooth(c1r,l10), f1r, linewidth=1, c='blue', ls='-', \
-                label='cohe rad')
+        ax.plot(smooth(c1w,l10), f1w, linewidth=1, c='navy', ls='-', label='cohe wind')
+
     else:
         ax.plot(c1w, f1w, linewidth=1, c='navy', ls='-', label='cohe wind')
-        ax.plot(c1r, f1r, linewidth=1, c='blue', ls='-', label='cohe rad')
     
     ax.set_xlim([0,1])
     ax.set_xlabel('coherence iso'+ str(tau[iso]) + '/' + 'met. data')
@@ -696,8 +825,7 @@ def coh_depthwind (cow,c1r,faws,f1r,depth,largelen,s,ax):
         if s[i] == 1:
             
             mean = np.nanmean(depth[i])
-            faws[i] = faws[i]*(1/60)*(1/60) 
-            f1r = f1r/60/60 # hour to second
+
             
             if largelen==1:
                 l0 = int(len(cow[i])/100)
@@ -749,7 +877,7 @@ def coherence_iso(t,coh,fre,ana1, ana2, ax):
                 if((a1 == i+1 and b1 == j+1) or (a2 == i+1 and b2 == j+1)):
                     if(t[i]!=-999 and t[j]!=-999):
                         k = code_index((i+1)*(j+1))
-                        ax.plot(1/fre[k],coh[k],linewidth=1, ls='--', color=c[k], label=str(t[i])+'/'+str(t[j])+'°C')
+                        ax.plot((1/fre[k])/60/60,coh[k],linewidth=1, ls='--', color=c[k], label=str(t[i])+'/'+str(t[j])+'°C')
 
 
     ax.set_ylabel('coherence', color='gray')
@@ -789,7 +917,7 @@ def phase_iso(t, ph, fre, conf, ana1,ana2, ax):
                         k = code_index((i+1)*(j+1))
                         f = fre[k]
                         p = ph[k]
-                        ax.scatter(1/f[conf[k]],abs(p[conf[k]]),marker='^', color=c[k], label=str(t[i])+'/'+str(t[j])+'°C')
+                        ax.scatter((1/f[conf[k]])/60/60,abs(p[conf[k]]),marker='^', color=c[k], label=str(t[i])+'/'+str(t[j])+'°C')
 
 
     ax.set_ylabel('Phase (degrees)', color='black')
@@ -856,7 +984,7 @@ def wind_direction(date,time,y,ys,ylow,ydi,wedd_up,wedd_low,ax):
     ax.plot(date, ylow, linewidth=1, c='red', ls='-', label=str(round(min([wedd_up,1]),1))+'< W < 20')
     
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
-    ax.set_ylabel('wind direction ($^{\circ}$)',color='gray') 
+    ax.set_ylabel('wind direction '+r'$(^{\circ})$',color='gray') 
     
     ax.legend(loc='upper right', prop={'size': 8})
     ax.set_xlim([date[0],date[-1]])
@@ -883,7 +1011,7 @@ def wind(date,time,dire,velo,ax):
     ax2.plot(t_smooth, y_smooth, linewidth=1, c='gray', ls='-')
     ax2.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
     ax2.tick_params(axis='y', labelcolor='gray' )
-    ax2.set_ylabel('wind direction ($^{\circ}$)',color='gray') 
+    ax2.set_ylabel('wind direction '+r'$(^{\circ})$',color='gray') 
     ax2.set_ylim([-200,380])
     ax2.set_yticks([0, 180, 360])
     
@@ -1113,9 +1241,10 @@ def classification_genera(W, heh_found,ahe,tau, ax):
     ax.set_ylim([0,0.5])
     
 def bueno_parameterization(W, norma, tau, ax):
-    
-
-    label=['bueno at al. (2020)', 'Analyzed period - '+str(tau[0])+ '°C']
+    try:
+        label=['bueno at al. (2020)', 'Analyzed period - '+str(tau[0])+ '°C']
+    except IndexError:
+        label=['bueno at al. (2020)', 'Analyzed period']
 
     norm = [4.24835E-18,	6.3378E-18,	9.45489E-18,	1.4105E-17,	2.10422E-17,	3.13913E-17,	4.68304E-17,	6.98627E-17,	1.04223E-16,	1.55482E-16,	2.31952E-16,	3.46032E-16,	5.16219E-16,	7.70109E-16,	1.14887E-15,	1.71391E-15,	2.55685E-15,	3.81437E-15,	5.69038E-15,	8.48904E-15,	1.26642E-14,	1.88927E-14,	2.81846E-14,	4.20465E-14,	0.000000000000062726,	9.35762E-14,	0.000000000000139599,	0.000000000000208258,	0.000000000000310684,	0.000000000000463486,	0.00000000000069144,	0.00000000000103151,	0.00000000000153883,	0.00000000000229566,	0.00000000000342472,	0.00000000000510909,	0.00000000000762187,	0.0000000000113705,	0.0000000000169628,	0.0000000000253055,	0.0000000000377513,	0.0000000000563184,	0.0000000000840172,	0.000000000125339,	0.000000000186984,	0.000000000278947,	0.00000000041614,	0.000000000620808,	0.000000000926136,	0.00000000138163,	0.00000000206115,	0.00000000307488,	0.00000000458718,	0.00000000684327,	0.000000010209,	0.00000001523,	0.0000000227205,	0.0000000338949,	0.0000000505653,	0.0000000754346,	0.000000112535,	0.000000167883,	0.000000250452,	0.00000037363,	0.00000055739,	0.000000831528,	0.00000124049,	0.0000018506,	0.00000276076,	0.00000411857,	0.00000614417,	0.000009166,	0.000013674,	0.0000203991,	0.0000304316,	0.0000453979,	0.0000677241,	0.000101029,	0.00015071,	0.000224817,	0.00033535,	0.000500201,	0.000746029,	0.001112536,	0.001658801,	0.002472623,	0.00368424,	0.005486299,	0.008162571,	0.012128435,	0.01798621,	0.01870651,	0.019455085,	0.020232997,	0.021041347,	0.021881271,	0.022753943,	0.023660578,	0.024602428,	0.025580788,	0.026596994,	0.027652422,	0.028748496,	0.02988668,	0.031068484,	0.032295465,	0.033569223,	0.034891409,	0.036263716,	0.037687891,	0.039165723,	0.040699054,	0.042289772,	0.043939815,	0.045651171,	0.047425873,	0.049266006,	0.051173701,	0.053151136,	0.055200538,	0.057324176,	0.059524366,	0.061803466,	0.064163876,	0.066608036,	0.06913842,	0.071757542,	0.074467945,	0.077272202,	0.080172912,	0.083172696,	0.086274194,	0.089480059,	0.092792953,	0.096215542,	0.099750489,	0.103400451,	0.10716807,	0.111055967,	0.115066732,	0.119202922,	0.123467048,	0.127861566,	0.132388874,	0.137051293,	0.141851065,	0.14679034,	0.151871164,	0.157095469,	0.162465063,	0.167981615,	0.173646647,	0.179461519,	0.185427419,	0.191545349,	0.197816111,	0.204240302,	0.210818293,	0.217550224,	0.224435986,	0.231475217,	0.238667285,	0.246011284,	0.253506017,	0.261149994,	0.268941421,	0.276878195,	0.284957894,	0.293177779,	0.301534784,	0.310025519,	0.318646266,	0.327392983,	0.336261303,	0.345246539,	0.354343694,	0.36354746,	0.372852234,	0.382252125,	0.391740969,	0.40131234,	0.402273761,	0.403235934,	0.404198853,	0.405162509,	0.406126897,	0.40709201,	0.40805784,	0.40902438,	0.409991625,	0.410959566,	0.411928197,	0.41289751,	0.4138675,	0.414838158,	0.415809477,	0.416781451,	0.417754072,	0.418727333,	0.419701228,	0.420675748,	0.421650887,	0.422626637,	0.423602991,	0.424579942,	0.425557483,	0.426535606,	0.427514305,	0.428493571,	0.429473397,	0.430453776,	0.431434701,	0.432416164,	0.433398158,	0.434380675,	0.435363708,	0.43634725,	0.437331292,	0.438315828,	0.43930085,	0.440286351,	0.441272322,	0.442258757,	0.443245647,	0.444232986,	0.445220765,	0.446208977,	0.447197615,	0.44818667,	0.449176135,	0.450166003,	0.451156265,	0.452146914,	0.453137943,	0.454129343,	0.455121108,	0.456113228,	0.457105697,	0.458098506,	0.459091648,	0.460085115,	0.4610789,	0.462072994,	0.46306739,	0.464062079,	0.465057055,	0.466052309,	0.467047833,	0.468043619,	0.46903966,	0.470035948,	0.471032475,	0.472029233,	0.473026213,	0.474023409,	0.475020813,	0.476018415,	0.477016209,	0.478014186,	0.479012339,	0.48001066,	0.48100914,	0.482007772,	0.483006548,	0.484005459,	0.485004498,	0.486003658,	0.487002929,	0.488002303,	0.489001774,	0.490001333]
     wedderburn = [100,	99,	98,	97,	96,	95,	94,	93,	92,	91,	90,	89,	88,	87,	86,	85,	84,	83,	82,	81,	80,	79,	78,	77,	76,	75,	74,	73,	72,	71,	70,	69,	68,	67,	66,	65,	64,	63,	62,	61,	60,	59,	58,	57,	56,	55,	54,	53,	52,	51,	50,	49,	48,	47,	46,	45,	44,	43,	42,	41,	40,	39,	38,	37,	36,	35,	34,	33,	32,	31,	30,	29,	28,	27,	26,	25,	24,	23,	22,	21,	20,	19,	18,	17,	16,	15,	14,	13,	12,	11,	10,	9.9,	9.8,	9.7,	9.6,	9.5,	9.4,	9.3,	9.2,	9.1,	9,	8.9,	8.8,	8.7,	8.6,	8.5,	8.4,	8.3,	8.2,	8.1,	8,	7.9,	7.8,	7.7,	7.6,	7.5,	7.4,	7.3,	7.2,	7.1,	7,	6.9,	6.8,	6.7,	6.6,	6.5,	6.4,	6.3,	6.2,	6.1,	6,	5.9,	5.8,	5.7,	5.6,	5.5,	5.4,	5.3,	5.2,	5.1,	5,	4.9,	4.8,	4.7,	4.6,	4.5,	4.4,	4.3,	4.2,	4.1,	4,	3.9,	3.8,	3.7,	3.6,	3.5,	3.4,	3.3,	3.2,	3.1,	3,	2.9,	2.8,	2.7,	2.6,	2.5,	2.4,	2.3,	2.2,	2.1,	2,	1.9,	1.8,	1.7,	1.6,	1.5,	1.4,	1.3,	1.2,	1.1,	1,	0.99,	0.98,	0.97,	0.96,	0.95,	0.94,	0.93,	0.92,	0.91,	0.9,	0.89,	0.88,	0.87,	0.86,	0.85,	0.84,	0.83,	0.82,	0.81,	0.8,	0.79,	0.78,	0.77,	0.76,	0.75,	0.74,	0.73,	0.72,	0.71,	0.7,	0.69,	0.68,	0.67,	0.66,	0.65,	0.64,	0.63,	0.62,	0.61,	0.6,	0.59,	0.58,	0.57,	0.56,	0.55,	0.54,	0.53,	0.52,	0.51,	0.5,	0.49,	0.48,	0.47,	0.46,	0.45,	0.44,	0.43,	0.42,	0.41,	0.4,	0.39,	0.38,	0.37,	0.36,	0.35,	0.34,	0.33,	0.32,	0.31,	0.3,	0.29,	0.28,	0.27,	0.26,	0.25,	0.24,	0.23,	0.22,	0.21,	0.2,	0.19,	0.18,	0.17,	0.16,	0.15,	0.14,	0.13,	0.12,	0.11,	0.1]

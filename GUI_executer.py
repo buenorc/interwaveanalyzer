@@ -311,11 +311,7 @@ def export_data():
 def temperature_function():
     global path_temp
     path_temp = askopenfilename(defaultextension='.tem', filetypes=[('TEM files','*.tem')])
-    
-    if path_temp:
-        label = Label(tab1, text="selected",anchor="e").grid(row=2,column=3)
-    else:
-        label = Label(tab1, text="file not selected", anchor="e").grid(row=2,column=3)
+
              
 def level_function():
     global path_level
@@ -326,27 +322,17 @@ def meteo_function():
     global path_meteo
     path_meteo = askopenfilename(defaultextension='.met', filetypes=[('MET files','*.met')])
     
-    if path_meteo:
-        label = label = Label(tab1, text="selected",anchor="e").grid(row=4,column=3)
-    else:
-        label = Label(tab1, text="file not selected", anchor="e").grid(row=4,column=3)
-                 
+     
 def senso_function():
     global path_senso
     path_senso = askopenfilename(defaultextension='.sen', filetypes=[('SEN files','*.sen')])
     
-    if path_meteo:
-        label = label = Label(tab1, text="selected",anchor="e").grid(row=13,column=3)
-    else:
-        label = Label(tab1, text="file not selected", anchor="e").grid(row=13,column=3)    
+ 
 def fetch_function():
     global path_fetch
     path_fetch = askopenfilename(defaultextension='.fet', filetypes=[('FET files','*.fet')])
     
-    if path_fetch:
-        label = Label(tab1, text="selected",anchor="e").grid(row=11,column=3)
-    else:
-        label = Label(tab1, text="file not selected", anchor="e").grid(row=11,column=3)
+
 
 def output_folder():
 
@@ -354,14 +340,6 @@ def output_folder():
     global folder_path
     folder_path = filedialog.askdirectory()
 
-    
-    if folder_path:
-        label  = Label(tab1, text="selected",anchor="e").grid(row=1,column=3)           
-    else:
-        label = Label(tab1, text="file not selected", anchor="e").grid(row=11,column=3)
-
-
- 
 def selected_len():
     global fetch_type
     fetch_type = int(typechoose.get())
