@@ -127,7 +127,7 @@ def thermo_region (qt,h,tau):
     z,zt   = 1,1
     dpz = deriva(rho[z+1],rho[z],h[z+1],h[z])
     
-    for z in range(0,qt-1) :   
+    for z in range(0,qt-2) :   
             
         new_dpz = deriva(rho[z+1],rho[z],h[z+1],h[z])
         
