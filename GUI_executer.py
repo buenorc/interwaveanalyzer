@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu May 23 13:07:23 2019
+Created by Rafael de Carvalho Bueno 
+Interwave Analyzer Graphical User Interface function
 
-@author: Rafael
+modififications to previosly versions must be specified here using WAVE codes:
+    
+W-23.01-1.00.3-00
+A-01.01-1.00.3-00
+V-22.01-1.00.3-00
+E-05.01-1.00.3-00
 """
 
 from tkinter import *
@@ -34,6 +40,7 @@ def open_button():
             path_senso = path_senso.replace('\n','')
             height_wind.delete(0,'end')
             height_wind.insert(END,float(reader.readline()))
+            radiation_on.set(int(reader.readline())) 
             reference_level.delete(0,'end')
             reference_level.insert(END,float(reader.readline()))
             contri_wind_var.set(float(reader.readline()))
@@ -188,7 +195,7 @@ def open_button():
             folder_path = reader.readline()
             
 def AboutCallBack():
-   msg = messagebox.showinfo( "About", " Interwave Analyzer - Version 1.00.1 \n Copyright (C) 2019 Rafael de Carvalho Bueno \n All rights reserved \n \n Developer: Rafael de Carvalho Bueno \n Supervisor: Tobias Bleninger \n Report problems and improvements to email adresss below \n rafael.bueno@ufpr.br\n \n for mor information, see: \n www.interwaveanalyzer.org \n ")    
+   msg = messagebox.showinfo( "About", " Interwave Analyzer - Version 1.00.3 \n Copyright (C) 2019 Rafael de Carvalho Bueno \n All rights reserved \n \n Developed by \n Rafael de Carvalho Bueno \n\n Co-developer \n Tobias Bleninger \n\n improvements and betterments by \n Andreas Lorke \n\n Report problems and improvements to email adresss below \n rafael.bueno.itt@gmail.com\n \n for mor information, see: \n www.bit.ly/interwave_analyzer \n ")    
 
 def OpenUrl(url):
     webbrowser.open_new(url)
@@ -211,6 +218,7 @@ def save_settings(temporary):
         data.write(str(path_meteo)+space)
         data.write(str(path_senso)+space)
         data.write(str(height_wind.get())+'\n')
+        data.write(str(radiation_on.get())+'\n')
         data.write(str(reference_level.get())+'\n')
         data.write(str(contri_wind_var.get())+'\n')
         data.write(str(latitude_var.get())+'\n')
@@ -353,7 +361,7 @@ def selected_len():
 
 
 def selected_level():
-    global level_type
+    global level_type, unif_level
     level_type = int(typelevel.get())
 
     if int(typelevel.get())==2:
@@ -488,15 +496,19 @@ def selected_send():
         send.config(state='disable')
     elif int(sensord.get()) ==1:
         send.config(state='normal')
-        
+   
+def window_destroy():
+    answer = messagebox.askyesno("exit",'do you really want to exit ?')
+    if answer:
+        window.destroy()
+     
         
 window = Tk()
 
 
-
-
+window.geometry("800x800")
+window.iconbitmap("interwave_icon.ico")
 window.title("Interwave Analyzer") 
-window.geometry('600x600')
 
 
 menubar = Menu(window)
@@ -506,7 +518,7 @@ filemenu.add_command(label = "Save as...", command = lambda: save_settings(0))
 
 filemenu.add_separator()
 
-filemenu.add_command(label = "Exit", command = window.destroy)
+filemenu.add_command(label = "Exit", command = window_destroy)
 menubar.add_cascade(label = "File", menu = filemenu)
 editmenu = Menu(menubar, tearoff=0)
 
@@ -515,7 +527,7 @@ editmenu.add_separator()
 
 helpmenu = Menu(menubar, tearoff=0)
 menubar.add_cascade(label = "Help", menu = helpmenu)
-url = 'https://rafaelbuenoo.wixsite.com/researchbueno/interwave-analyzer'
+url = 'https://sites.google.com/view/interwaveanalyzer/interwave-analyzer'
 helpmenu.add_command(label = "Manual", command = lambda aurl=url:OpenUrl(aurl))
 helpmenu.add_command(label = "About", command = AboutCallBack)
 
@@ -544,6 +556,10 @@ Button(tab1,text='Open File',command=temperature_function).grid(row=2,column=1,p
 # ------------------------------------------------------------------
 Label(tab1,anchor="w", text="Meteorological data:").grid(row=4,column=0,pady=4,sticky='w')
 Button(tab1,text='Open File',command=meteo_function).grid(row=4,column=1,pady=4,sticky='w')
+
+radiation_on= IntVar()
+Checkbutton(tab1,text='Solar Radiation', variable=radiation_on, onvalue=1, offvalue=0).grid(row=3,column=0,pady=4,sticky='w') 
+radiation_on.set(1)
 
 
 Label(tab1, text="Height of the wind measurements (meters):").grid(row=5,column=0,pady=4,sticky='w')
@@ -605,8 +621,8 @@ Label(tab1,anchor="w",font="Verdana 8 bold", text="Water level data:",width=50).
 typelevel = StringVar()
 typelevel.set(1)
 
-rad1 = Radiobutton(tab1,text='Uniform', variable=typelevel, value=1, command=selected_level).grid(row=17,column=0,pady=4,sticky='w') 
-rad2 = Radiobutton(tab1,text='File', variable=typelevel, value=2, command=selected_level).grid(row=18,column=0,pady=2,sticky='w')
+Radiobutton(tab1,text='Uniform', variable=typelevel, value=1, command=selected_level).grid(row=17,column=0,pady=4,sticky='w') 
+Radiobutton(tab1,text='File', variable=typelevel, value=2, command=selected_level).grid(row=18,column=0,pady=2,sticky='w')
  
 Label(tab1, text="Water level (meters):").grid(row=17,column=0,pady=4)
 unif_level = Entry(tab1, bd =3)
@@ -798,7 +814,7 @@ send.config(state='disable')
 
 
 smooth_button= IntVar()
-che_smooth = Checkbutton(tab3,font="Verdana 8 bold",text='Smooth results (recommended for large data analysis)', variable=smooth_button, onvalue=1, offvalue=0).grid(row=14,column=0,pady=8,sticky='w') 
+Checkbutton(tab3,font="Verdana 8 bold",text='Smooth results (recommended for large data analysis)', variable=smooth_button, onvalue=1, offvalue=0).grid(row=14,column=0,pady=8,sticky='w') 
 smooth_button.set(0)
 
 

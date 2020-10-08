@@ -1,25 +1,70 @@
 # -*- coding: utf-8 -*-
 """
-Module with functions to calculate physical indices/parameter to identify baro-
-clinic activity in thermal stratified system
+Created by Rafael de Carvalho Bueno
 
-@author: BUENO, R. (Rafael de Carvalho Bueno)
-@date  : Jul 12 2020
+Module with functions to calculate physical indices/parameter to identify 
+baroclinic activity in thermal stratified system (brain module)
 
 Internal Functions:  functions that is used just by the software (does not provide any additional information)
 External Functions:  functions that can be used externally 
 
+modififications to previosly versions must be specified here using WAVE codes:
+    
+W-23.04-1.00.0-00
+A-01.04-1.00.3-00
+V-22.04-1.00.3-00
+E-05.04-1.00.3-00
+
 """
+
 # external modules
-from   scipy   import signal, interpolate
-from   wavelib import wavelet
-import numpy as np
-import warnings
 import math
+import warnings
+import numpy.matlib
+
+import numpy as np
+import scipy.special as sc
+
+from scipy.stats import t, sem
+from scipy import signal, interpolate
+from scipy.stats.distributions import chi2
+
+# internal modules
+from   wavelib import wavelet
+import info_warning as war 
+
 
 # supress warnings
 warnings.simplefilter("error")
 
+
+def wind_fetch(dw_mean,linang,angle,dists,type_length,dig):
+    
+    if type_length == 2:
+        Lw_cont  = windbar_fetch(dw_mean,linang,angle,dists)
+        
+        try:
+            ls_min = np.nanmin(Lw_cont)
+            ls_max = np.nanmax(Lw_cont)
+            ls_ave = np.nanmean(Lw_cont)
+            ls_fetch = [ls_min,ls_ave,ls_max]  
+            
+            if np.isnan(Lw_cont).all() == True:
+                ls_near  = dists[find_nearest(angle,dw_mean)[1]]
+                ls_fetch = [0.95*ls_near,ls_near,1.05*ls_near]
+                
+                war.coarse_fetch(dig)
+            
+        except :
+            ls_near  = dists[find_nearest(angle,dw_mean)[1]]
+            ls_fetch = [0.95*ls_near,ls_near,1.05*ls_near]
+            
+            war.coarse_fetch(dig) 
+    
+    else:
+        ls_fetch = [0.95*dists, dists, 1.05*dists]
+    
+    return ls_fetch
  
 def comparison_definition(c):
 #   
@@ -53,7 +98,6 @@ def depths(profile, depth, lin):
 #   Internal Function: Geometry definitions
 #   Function to get the depth that are associated to specified/analyzed sensors
 #
-
     d   = []
     aux = np.zeros((lin),float)
 
@@ -93,7 +137,7 @@ def isotherms (reqt, qt, h,tau,zmax,zmin,aux_iso):
 #
     
     tau_near, idx = find_nearest(tau,reqt)
-    
+
 
     if(tau_near > reqt):
         if (idx == qt-1):           
@@ -104,7 +148,7 @@ def isotherms (reqt, qt, h,tau,zmax,zmin,aux_iso):
     
     else:
         if (idx == 0) :
-            return zmax   # When the isotherm is not defined (water surface)
+            return None   # When the isotherm is not defined (water surface)
         else:
             return interpolation(h[idx-1],h[idx],tau[idx-1],tau[idx],reqt,aux_iso)
     
@@ -127,11 +171,11 @@ def thermo_region (qt,h,tau):
     z,zt   = 1,1
     dpz = deriva(rho[z+1],rho[z],h[z+1],h[z])
     
-    for z in range(0,qt-2) :   
+    for z in range(0,qt-1) :   
             
         new_dpz = deriva(rho[z+1],rho[z],h[z+1],h[z])
         
-        if new_dpz >= dpz :
+        if new_dpz > dpz :
             dpz = new_dpz
             zt  = z
     
@@ -152,29 +196,35 @@ def thermocline_depth (qt,h,tau):
 #   thermo  output      thermocline depth (referenced to the water surface)
 #   rho     output      water density (1d vector z-length)
     
+
+    error = 0
     dpz, z, mid, rho = thermo_region(qt,h,tau)
     
-    if(z == 0 or z > qt-3):  # standard determination is assumed when 
-        return mid, rho      # thermocline depth is qt(0,N-2,N-1,N).          
     
-    dpup = deriva(rho[z+2],rho[z+1],h[z+2],h[z+1])
-    dpdn = deriva(rho[z],rho[z-1],h[z],h[z-1])
-    
-    tdup = abs(dpz - dpup)
-    tddn = abs(dpz - dpdn)
+    if z == 0:
+        error  = 1
+        thermo = mid
+    else:
+        try:
+            
+            hplus = (h[z]   - h[z+2])/2
+            hminu = (h[z-1] - h[z+1])/2
+            
+            drho      = (rho[z+1]-rho[z])/(h[z]-h[z+1])
+            drho_plus = (rho[z+2]-rho[z+1])/(h[z+1]-h[z+2])
+            drho_minu = (rho[z]-rho[z-1])/(h[z-1]-h[z])
 
-    if(tdup==0) :
-        tdup = 0.001   
-    if(tddn==0) :
-        tddn = 0.001
-    
-    pup  = abs(abs(np.mean([h[z+2],h[z+1]]))-mid)/tdup
-    pdn  = abs(mid-abs(np.mean([h[z],h[z-1]])))/tddn    
-    pdif = pdn+pup
-    
-    thermo = h[z+1]*(pup/pdif) + h[z]*(pdn/pdif)
+            Dplus = hplus/(drho-drho_plus)
+            Dminu = hminu/(drho-drho_minu)
+   
+            thermo = h[z+1]*(Dplus/(Dminu+Dplus)) + h[z]*(Dminu/(Dminu+Dplus))
+        
+        except:
+            error  = 1
+            thermo = mid
+  
 
-    return thermo, rho
+    return thermo, rho, error
 
 
 def metathick (qt,h,tau,minval):
@@ -193,7 +243,8 @@ def metathick (qt,h,tau,minval):
     
     # 1.1) metalimnion-epilimnion interface:   
     
-    z = zt                                   
+    z = zt     
+                           
     dmin = deriva(rho[z+1],rho[z],h[z+1],h[z])
     
     while (dmin > minval) and (z > 0):                                            
@@ -231,7 +282,7 @@ def metathick (qt,h,tau,minval):
     else:
         zh   = abs(np.mean([h[z+1],h[z]])) + (minval - dmin)*aux1/aux2                 
     
-     
+  
     return ze,zh
     
 
@@ -279,7 +330,7 @@ def density_2layer (qt,h,tau,H,z0):
 #   pe/ph   output      epilimnion/hypolimnion water density
 #   pu/pd   output      superficial/bottom water density
     
-    thermo, rho = thermocline_depth (qt,h,tau)
+    thermo, rho, error = thermocline_depth (qt,h,tau)
     
     hh = thermo - z0   
     he = H - thermo
@@ -303,7 +354,8 @@ def density_2layer (qt,h,tau,H,z0):
     pu = rho[0]       
     pd = rho[qt-1]    
     
-    return he, hh, pe, ph, pu, pd
+    
+    return he, hh, pe, ph, pu, pd, error
 
 def density_3layer (qt,h,tau,minval,H,z0):
 #
@@ -321,11 +373,12 @@ def density_3layer (qt,h,tau,minval,H,z0):
     
     ze, zh = metathick (qt,h,tau,minval)   
     
-    if(ze > zh and ze < h[0] and zh > z0):
+    try:
         
         h1 = H  - ze
         h2 = ze - zh
         h3 = zh - z0
+        
        
         p1, p2, p3, np1, np2, np3 = 0, 0, 0, 0, 0, 0
        
@@ -347,34 +400,72 @@ def density_3layer (qt,h,tau,minval,H,z0):
         p1 = p1/np1
 
                 
-        if np3 == 0:
-            p3 = rho[-1]
-        else:
-            p3 = p3/np3
-
-            
-        if np2 == 0:
-            p2 = (p1+p3)/2
-        else:
-            p2 = p2/np2
-    else:
+        if np3 == 0: p3 = rho[-1]
+        else: p3 = p3/np3
         
-        h1,h2,h3,p1,p2,p3 = 999, 999, 999, 999, 999, 999
+        
+        if np2 == 0: p2 = (p1+p3)/2
+        else: p2 = p2/np2
     
+    except:
+        h1 = (H-z0)/3
+        h2 = (H-z0)/3
+        h3 = (H-z0)/3        
+        
+        try:
+            p1 = np.nanmean(np.nanmean(rho[0:int(qt/3)]))
+            p2 = np.nanmean(np.nanmean(rho[int(qt/3):int(2*qt/3)]))
+            p3 = np.nanmean(np.nanmean(rho[int(2*qt/3):qt]))
+        except:
+            p1 = np.nanmean(rho[0])
+            p2 = np.nanmean(rho[int(qt/2)])
+            p3 = np.nanmean(rho[-1])
+            
     return h1,h2,h3,p1,p2,p3
+
+def thickness_decomposition(psi,zph, rhoph):
+#
+#   External Function: Thermal Stratification Analysis
+#   Function to determine the thickness of each layer (model estimator)
+#    
+    lmode = len(psi[0,:])
+    lzph  = len(zph)-1
+    
+    layer_depth, layer_rho = [], []
+    for m in range(lmode):       # loop in modes
+        
+        laymode, layrho = [], []
+        
+        rho,i = rhoph[0],1
+        for z in range(lzph):    # loop in depth
+            
+            if psi[z,m]/psi[z+1,m] < 0:
+                
+                laymode.append(interpolation(zph[z],zph[z+1],psi[z,m],psi[z+1,m],0,0))
+                layrho.append(rho/i)
+                rho, i = 0, 0
+                z = z + 1
+                
+            i = i + 1
+            rho = rhoph[z] + rho
+            
+        layer_rho.append(layrho)
+        layer_depth.append(laymode)
+        
+    return layer_depth, layer_rho    
         
 def structure2layer(qt,h,tau,H,z0):
 #
 #   External Function: Thermal Stratification Analysis   
 #   Function to compute the thermal structure of a two-layer system
 #
-    he,hh,pe,ph,pu, pd = density_2layer(qt,h,tau,H,z0)
+    he,hh,pe,ph,pu, pd, error = density_2layer(qt,h,tau,H,z0)
     
     glin   = abs(9.81*(ph-pe)/ph)  
        
     n    = math.sqrt(glin/he)
     
-    return he,hh,pe,ph, glin, n,pu,pd
+    return he,hh,pe,ph, glin, n,pu,pd, error
 
 def structure3layer(qt, h, tau, minval, H, z0):
 #
@@ -382,9 +473,24 @@ def structure3layer(qt, h, tau, minval, H, z0):
 #   Function to compute the thermal structure of a three-layer system
 #    
     h1,h2,h3,p1,p2,p3 = density_3layer(qt, h, tau, minval, H, z0)
+
+    return h1,h2,h3,p1,p2,p3
+
+def approx_layer(he,hh,pe,ph): 
+#
+#   External Function: Thermal Stratification Analysis   
+#   Function to compute the three-layer the derivative method fails
+#  
+    h1 = he - 0.05*he
+    h2 = 0.05*(he+hh) 
+    h3 = hh - 0.05*hh
+            
+    p1 = pe
+    p2 = (pe+ph)/2
+    p3 = ph
     
     return h1,h2,h3,p1,p2,p3
-  
+
 def wedderburn(glin,he,wast,ls):
 #
 #   External Function: Thermal Stability Analysis
@@ -403,9 +509,143 @@ def wedderburn(glin,he,wast,ls):
         
     return wedd   
 
-         
-           
 
+def chi2inv(p, nfft, nperseg, test=None):
+#   
+#   External Function: Statistical Analysis        
+#   Function to estimate the inverse of cumulative distribution function (percentile)
+#     
+    if test == None:
+        nw2=2*(2.5164*(nfft/nperseg))*1.2
+        return chi2.ppf(p, df=nw2)/nw2
+    else:
+        nw2=(nfft/nperseg)
+        return 2*sc.gammaincinv(nw2,p)/nw2  # Inverse incomplete gamma function
+
+
+def mean_confidence_interval(data, confidence=0.99):
+#   
+#   External Function: Statistical Analysis        
+#   Function to mean and confidence interval
+# 
+
+    dof = len(data) -1 
+    mean, sigma = np.mean(data,axis=0), sem(data, axis=0)
+
+    h = t.interval(confidence, dof, mean, sigma)
+
+    return mean, h[0], h[1]
+
+def conflevel(Ax,npr,dt,rho,wr,nfft,nperseg):
+#   
+#   External Function: Statistical Analysis        
+#   Function to estimate the confidence levels based on the chi2 test (red noise)
+# 
+    facchi95=chi2inv(0.95, nfft, nperseg)   # Bernhardt and Kirillin (2013)
+    
+    fnyq=1/(2*dt)   # Nyquist frequency (half the sampling rate)
+
+
+    theored=np.zeros((npr))
+    for i in range(npr):
+        theored[i]=(1-rho**2)/(1-(2*rho*np.cos(np.pi*wr[i]/fnyq))+rho**2)
+
+    theoredun=theored[0];
+    theored[0]=0;
+
+    Art = np.mean(theored)
+    theored[0]=theoredun
+    theored=theored*(Ax/Art)    # Normalisation of the spectrum
+
+    tabtchi=[]
+    tabtchi[:]=theored*facchi95  # Chi-square confidence levels
+     
+    return tabtchi
+
+def rhoAR1(datax):
+#   
+#   External Function: Statistical Analysis        
+#   Function to calculate the lag-1 autocorrelation coefficient 
+#   for an AR1 autocorrelation of data.
+#
+    nrho=len(datax)
+    rho=0
+    sommesup=0
+    sommeinf=0
+
+    moy=np.sum(datax)/nrho
+    datam=datax-moy
+
+    for i in range(1,nrho):
+        j=i-1
+        sommesup=sommesup+(datam[i]*datam[j])
+        sommeinf=sommeinf+((datam[j])**2)
+        
+    rho=sommesup/sommeinf
+    return rho
+
+def Rednoise(nt,rho,nsim):
+#   
+#   External Function: Statistical Analysis        
+#   Function to calculates AR1 autocorrelation (Monte-Carlo simulation)
+#
+    rzero=0
+    
+    redtab=np.zeros((nt,nsim))
+    red=np.zeros(nt)
+    i,j=1,1
+
+    srho=np.sqrt(1-rho**2)
+
+    for i in range(nsim):
+        
+        white=srho*np.random.randn(1)
+        red[0]=rho*rzero+white
+        
+        for j in range(1,nt):
+            white=srho*np.random.randn(1)
+            red[j]=rho*red[j-1]+white
+
+        redtab[:,i]=red
+
+    return redtab
+
+def RedConf(datax,dt,nsim,nperseg):
+#   
+#   External Function: Statistical Analysis        
+#
+    # calculation of the lag-1 autocorrelation coefficient
+    rho=rhoAR1(datax)
+    
+    nt = len(datax)
+    # calculation of nsim red noise models
+    redtab = Rednoise(nt,rho,nsim)
+    
+    datan=[]
+    i=1
+    
+    datan=datax-np.mean(datax)
+
+    # spectral analysis of the data
+    #nfft = max(256,2**np.ceil(np.log2(abs(len(datan)))))
+    nfft = nperseg
+    w,po   = signal.welch(datan[:], fs=1/dt, nperseg=nperseg)
+    
+    # calculation of the area of the data power spectrum
+    Ax=np.mean(po)
+    
+
+    for i in range(nsim):  # spectral analysis of the nsim red noise signals
+        
+        red2n=redtab[:,i] -np.mean(redtab[:,i])
+        wr,pr = signal.welch(red2n, fs=1/dt, nperseg=nperseg)
+        
+    npr=len(pr)
+    tabtchi = conflevel(Ax,npr,dt,rho,wr,nfft,nperseg)
+    
+    return wr,tabtchi
+    
+    
 def ciout(x):
 #   
 #   External Function: Statistical Analysis        
@@ -414,14 +654,19 @@ def ciout(x):
     nivel = ci(x)[1]-np.mean(ci(x))
     return nivel
 
+
 def average(arr,n):
 #
 #   External Functions: Statistical Analysis
 #   Function to n-average data (arr)
 #    
     n=int(n)
-    end = n*int(len(arr)/n)
-    return np.nanmean(arr[:end].reshape(-1,n),1)
+    
+    if n == 0:
+        return np.nanmean(arr)
+    else:
+        end = n*int(len(arr)/n)       
+        return np.nanmean(arr[:end].reshape(-1,n),1)
 
 def ci(x):
 # 
@@ -464,16 +709,16 @@ def velocityten(wz,z):
     if z == 10:
         return wz
        
-    for t in range(l):
+    for time in range(l):
         
-        if wz[t] < 5:
+        if wz[time] < 5:
             Cd = 0.0010
         else:
             Cd = 0.0015
         
-        wind = wz[t]/(1-np.sqrt(Cd)/k*exp) 
+        wind = wz[time]/(1-np.sqrt(Cd)/k*exp) 
 
-        w10[t] = wind
+        w10[time] = wind
     
     return w10
 
@@ -491,6 +736,8 @@ def wind_average(wd,iw):
     mean  = (360+mean)%360
     
     return mean
+
+   
 
 def windbar_fetch(dw_mean,linang,angle,dists):
 #
@@ -626,9 +873,10 @@ def interpolation(y1,y2,x1,x2,x,auxiso):
 #   External Function: Mathmatical Analysis
 #   Result from linear Interpolation betweem two points (x,y) for x 
 #    
-    
+
     if(y1 == y2 or x1 == x2):
-        return np.mean(y1,y2)
+
+        return np.mean([y1,y2])
     
     else: 
         f = interpolate.interp1d([x1,x2], [y1,y2])    
@@ -641,6 +889,18 @@ def interpolation(y1,y2,x1,x2,x,auxiso):
             return auxiso    
 
 
+#def confidence (ff,k):
+#
+#   External Function: Mathmatical Analysis
+#   Connfidence interval for PSD considering conf. level of 95%
+#      
+#    conf = 0.95   
+    
+#    chi_val_95 = chi2.isf(q=(1-conf)/2, df=k)
+#    y=(ff/len(ff))*(chi_val_95/k)
+
+#    return y
+
 def sorting_2d(data):
 #
 #   External Function: Conditional Analysis
@@ -648,9 +908,9 @@ def sorting_2d(data):
 #    
     ordered = np.zeros((len(data),len(data[0])),float)
 
-    for t in range(len(data)):
+    for time in range(len(data)):
         
-        data_aux = data[t,:]
+        data_aux = data[time,:]
         
         temporary = []
         first     = 'on'
@@ -669,7 +929,7 @@ def sorting_2d(data):
         auxiliary     = np.full(len(data_aux),np.nan)
         auxiliary[idx:len(temporary)+idx] = temporary
         
-        ordered[t][:] = auxiliary
+        ordered[time][:] = auxiliary
     
     return ordered
 
@@ -747,36 +1007,58 @@ def class_generation (riw,hh,he,ls):
 
 
 
-def spigel(he,W):
+def spigel(he,H,W1,W2):
 #
 #   External Function: Classification Analysis
 #   Function to provide the BSIW amplitude based on Spigel and Imberger theory
 #     
-    return 0.4996*he/W
+    zeta = 0.4996*he/W1
+    if zeta > H:    zeta = 0.4996*he/W2
+    
+    return 0.4996*he/W1
 
-def bueno(he,hh,W):
+def bueno(he,hh,W1,W2, typ=None):
 #
 #   External Function: Classification Analysis
 #   Function to provide the BSIW amplitude based on Bueno and Bleninger theory
 #    
-    f = 0.76 - 0.52*he/(hh+he)
-    k = 0.40
     
-    return f*he/(1+np.exp(k*W)) 
+    xi = 0.1
+    k1 = 6
+    k2 = 0.25
+    H  = he/(he+hh) 
+    
+    g   = 12.156*(H**3)-15.714*(H**2)+2.8426*H+2.0846
+    f   = g*np.exp((H**2)/k2)
+    
+    if typ == 'amplitude':
+        
+        if W1 < 5:
+            amp = 0.4996*he/W1
+            if amp > he+hh:
+                amp = 0.4996*he/W2
+        
+        return xi*he*np.exp((W1-k1)**2/(2*f**2))
+    
+    amp = []
+    for i in range(len(W1)):
+        amp.append(xi*he*np.exp((W1[i]-k1)**2/(2*f**2)))
+    
+    return np.array(amp)
     
 
-def iw_generation (riw, hh, he, ls):
+def iw_generation (wedd, hh, he, ls):
 #
 #   External Function: Classification Analysis
 #   Function to identify Regime 3 (Spigel and Imberger, 1980)
 #
-#   lower_gene      output      lower Ri number for regime 3
-#   upper_gene      putput      highest Ri number for regime 3
+#   lower_gene      output      lower W number for regime 3
+#   upper_gene      putput      highest W number for regime 3
 #
     aux1 = math.sqrt((hh+he)/hh)
     
-    lower_gene = ls/(2*he)*aux1
-    upper_gene = ls**2/(4*he**2)*aux1**2
+    lower_gene = 0.5*aux1
+    upper_gene = ls/(4*he)*aux1**2
     
     return lower_gene, upper_gene
     
@@ -824,18 +1106,23 @@ def welch_method(serie,size,w, dt):
     if (size == 0):              # when windowsize is not defined 
         size =  4*24*60*60       # 4 days window (generally used to meteorological data)
 
-    dt = 60*60*dt  
-    n  = int(size/dt)
+    nsim = 10                    # number of Monte Carlo simulations;
+    dt   = 60*60*dt              # dt in hour 
+    n    = int(size/dt)          # nperseg
     
     if n > len(serie):  # Warning: the specified window size is larger than the time-serie
         n = len(serie)
     
     serie    = mask(serie) 
+    serie = serie - np.mean(serie)
+    
     freq, ff = signal.welch(serie, fs=1.0/dt, window=w, nperseg=n, detrend='linear', axis=-1)
     
-    per  = 1/freq[1:]/60/60                # convert frequency (Hz) to period (h)
+    wr, conf = RedConf(serie,dt,nsim,n)
+    
+    per  = 1/freq[1:]/60/60           # convert frequency (Hz) to period (h)
         
-    return freq[1:], per, ff[1:]
+    return freq[1:], per, ff[1:], wr, conf
 
 
 def wave_spectral (si, dt, mother): 
@@ -852,13 +1139,15 @@ def wave_spectral (si, dt, mother):
 #  
 #   Wavelet parameters:
 # 
-    pad = 1            # pad the time series with zeroes (recommended)
-    dj = 0.10          # this will do 10 sub-octaves per octave
-    s0 = 8.*dt         # this provide a analysis at a scale of 1 hour
-    j1 = 15./dj         # this provides 15 powers-of-two with dj sub-octaves each
+    pad = 1         # pad the time series with zeroes (recommended)
+    dj = 0.10       # this will do 10 sub-octaves per octave
+    s0 = 2.*dt      # this provide a analysis at a scale of 8*dt time-scale
+    j1 = 15./dj     # this provides 15 powers-of-two with dj sub-octaves each
 #
 #      
+
     si = mask(si)
+
     l=len(si)
     time  = np.arange(0,l) * dt
     
@@ -890,13 +1179,11 @@ def coherence_shift(s1,s2,window,dt):
     
     #calculate 95 % confidence level
     edof = (len(s1)/(nperseg/2)) * cxy.mean() 
-    gamma95 = 1.-(0.01)**(1./(edof-1.))
+    gamma95 = 1.-(0.8)**(1./(edof-1.))
 
     conf95 = np.where(cxy>gamma95)
     
     return phase, cxy , fcoh, conf95
-
-
 
 def butter_bandpass(lowcut, highcut, fs, order):
 #
@@ -918,8 +1205,9 @@ def butter_bandpass_filter(data, lowcut, highcut, fs):
 #   External Function: Spectral Analysis
 #   Function to band pass filter a signal data
 #
+    data   = mask(data) 
     data   = data - np.mean(data)
-    sos   = butter_bandpass( lowcut, highcut, fs, 4)
+    sos   = butter_bandpass( lowcut, highcut, fs, 1)
     f = signal.sosfilt(sos, data)
     
     return f  

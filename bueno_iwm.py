@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-@
-@ INTERWAVE ANALYZER 
-@
-@ Program dedicated to detect the dynamic of thermal stratified basins.
-@
-@ Created on July 2020
-@ Author: BUENO, R.C. (RAFAEL DE CARVALHO BUENO)
-            
+Created by Rafael de Carvalho Bueno 
+Interwave Analyzer main module (heart module)
+
+modififications to previosly versions must be specified here using WAVE codes:
+    
+W-23.02-1.00.3-00
+A-01.02-1.00.3-01
+V-22.02-1.00.3-01
+E-05.02-1.00.3-01
 """
 
 # -----------------------------------------------------------------------------
@@ -16,11 +17,11 @@
 #
 # From Interwave Analyzer Library
 #
-
 import graph_package as graph            # package of graphs
 import internal_module as mod            # package of functions
 import modeling_internalwave   as miw    # package of internal wave model
 import load_data as load                 # package of inputs (tab delimiter)
+import info_warning as war
 #
 # From Python Library
 #
@@ -30,14 +31,13 @@ import time
 import datetime
 import numpy as np
 
-import matplotlib
-matplotlib.use('Agg')
-
 from tkinter import *
 from matplotlib import pyplot as plt
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 
+import matplotlib
+matplotlib.use('Agg')
 
 class StdoutRedirector(object):
 
@@ -47,8 +47,7 @@ class StdoutRedirector(object):
     def write(self, str):
         self.text_area.insert(END, str)
         self.text_area.see(END)
-
-     
+    
 def main():
    
     from reportlab.pdfgen import canvas
@@ -59,9 +58,10 @@ def main():
     root = Tk()
     root.configure(background='white')
     root.title("Interwave Analyzer Running") 
-    root.geometry('600x600')
+    root.geometry('800x800')
     
-    
+    root.iconbitmap("interwave_icon.ico")
+
     outputPanel = Text(root, wrap='word', height=30, width=100)
     outputPanel.grid(column=0, row=0, columnspan = 2, sticky='NSWE', padx=5, pady=5)
 
@@ -72,7 +72,7 @@ def main():
     root.update()
     print ("--------------------------------------------------------------------------------------")
     root.update()
-    print ("> Interwave Analyzer, version 1.00.1        May   2020")
+    print ("> Interwave Analyzer, version 1.00.2        July   2020")
     root.update()  
     print ("> ")
     root.update() 
@@ -94,6 +94,7 @@ def main():
         sen_nam = reader.readline()
         sen_nam = sen_nam.replace('\n','') 
         rw  = float(reader.readline())
+        rad = int(reader.readline())
         z0  = float(reader.readline())
         linang = float(reader.readline())
         lat = float(reader.readline())
@@ -126,7 +127,7 @@ def main():
 
         autoff_wsuser = int(reader.readline())
         windsizeuser  = float(reader.readline())
-        windsizeuser  = windsizeuser*24*60*60         # convert days to seconds
+        windsizeuser  = windsizeuser*24*60*60         
               
         window = reader.readline()               
         mother = reader.readline()
@@ -164,7 +165,6 @@ def main():
         ana1 = mod.comparison_definition(c1)
         ana2 = mod.comparison_definition(c2)
 
-
         turn_temp = int(reader.readline())  
     
         sen = np.zeros(4,float)
@@ -183,9 +183,7 @@ def main():
         output_path = output_path+'/'
     
     os.remove('temporary.txt')
-
     root.update()
-    
 # -----------------------------------------------------------------------------
 # LOAD DATA FROM FILE
 # -----------------------------------------------------------------------------
@@ -194,34 +192,35 @@ def main():
     root.update()   
        
     lin, qt = load.file_len(nam,col='on') 
-        
+
+
     date, temp, serialt, dt = load.temper_read(nam,lin,qt)
     ean, h, tempa           = load.serial_cota(serialt,nac,lin,qt,temp,sen_nam,ean_serie,ean_cota,z0)
-    wind, dw, ra            = load.serial_wind(serialt,win,lin)
+    wind, dw, ra            = load.serial_wind(serialt,win,rad,lin)
 
 
     if type_length == 1: 
-        dists = len_basin 
+        angle, dists = None, len_basin 
+        
     elif type_length == 2:
         angle, dists  = load.windfetch(dw,fna)
-
-    aux_iso = 1    # value to do the corehence analysis with wind and solar rad.
-
 
     print ("> Part III     Defining constants and creating variables... ")
     root.update()  
 # -----------------------------------------------------------------------------
-# DEFINING CONSTANTS 
+# DEFINING PARAMETER AND CONSTANTS + CREATING THE DIAGNOSIS FILE 
 # -----------------------------------------------------------------------------
 
-    dj       = 0.1       # spatial resolution for countourf graph (m) 
-    dci      = 1         # decimal of countouf graph (generally is refered to dj)   
+    aux_iso = 1       # iso number to apply the corehence analysis with wind
 
-    ddep   = 0.5         # range used to define the model sensitivity
+    dj       = 0.1    # spatial resolution for countourf graph (m) 
+    dci      = 1      # decimal of countouf graph (generally is refered to dj)   
+
+    ddep   = 0.5      # range used to define the model sensitivity
     drho   = 0.1
 
-    lh_sen = 100         # 0.01 for +- 0.5m from the reference thickness 
-    lp_sen = 20          # 0.01 for +- drho kg/m³ from the reference density
+    lh_sen = 100      # 0.01 for +- 0.5m from the reference thickness 
+    lp_sen = 20       # 0.01 for +- drho kg/m³ from the reference density
     
     dig = open(output_path+'diagnosis.txt', 'w')
     dig.write("-------------------------------------------------------------------------------------\n")
@@ -232,75 +231,71 @@ def main():
 # DEFINING ARRAYS 
 # -----------------------------------------------------------------------------    
 
-# general parameters
+# general parameters:
     glin = np.zeros((lin),float)     # reduced gravity (m/s²)
     wast = np.zeros((lin),float)     # friction velocity of the wind  (m/s) 
-    strs     = np.zeros((lin),float)     # Winds stress (N/m²)
+    strs = np.zeros((lin),float)     # Winds stress (N/m²)
     
-    n    = np.zeros((lin),float)     # stability frequency (rad*Hz)
-    riw  = np.zeros((lin),float)     # wind richardson number (-)                                        
-    wedd     = np.zeros((lin),float)     # Wedderburn Number (-) 
-    wedd_inv = np.zeros((lin),float)     # Inverse of the Wedderburn Number (dn/dh)
+    n   = np.zeros((lin),float)     # stability frequency (rad*Hz)
+    riw = np.zeros((lin),float)     # wind richardson number (-)                                        
+    wedd     = np.zeros((lin),float) # Wedderburn Number (-) 
+    wedd_inv = np.zeros((lin),float) # Inverse of the Wedderburn Number (dn/dh)
 
     thermo_temp = np.zeros((lin),float) # temperature of the thermocline (°C)
 
-# considering a thin metalimnion:
-    ht     = np.zeros((lin),float)     # thermocline depth (m) from 800 m   
-    he     = np.zeros((lin),float)     # epilimnion thickness (m)
-    hh     = np.zeros((lin),float)     # hypolimnion thickness (m)     
-    pe     = np.zeros((lin),float)     # average density of the epilimnion (kg/m³)
-    ph     = np.zeros((lin),float)     # average density of the hypolimnion (kg/m³)
+# two-layer system:
+    ht = np.zeros((lin),float)     # thermocline depth (m) 
+    he = np.zeros((lin),float)     # epilimnion thickness (m)
+    hh = np.zeros((lin),float)     # hypolimnion thickness (m)     
+    pe = np.zeros((lin),float)     # average density of the epilimnion (kg/m³)
+    ph = np.zeros((lin),float)     # average density of the hypolimnion (kg/m³)
 
-# 3 layer systems
-    h1      = np.zeros((lin),float)     # 1st layer thickness (m)
-    h2      = np.zeros((lin),float)     # 2nd layer thickness (m)
-    h3      = np.zeros((lin),float)     # 3rd layer thickness (m)
-    p1      = np.zeros((lin),float)     # average density of 1st layer (kg/m³)
-    p2      = np.zeros((lin),float)     # average density of 2nd layer (kg/m³)
-    p3      = np.zeros((lin),float)     # average density of 3rd layer (kg/m³)
+    Pbar = np.zeros((lin),float)
+    Hbar = np.zeros((lin),float)
 
-    pu     = np.zeros((lin),float)     # "surface" density (1m above) (kg/m³)
-    pd     = np.zeros((lin),float)     # "bottom" density (2m from btm) (kg/m³)
-    pm     = np.zeros((lin),float)     # density difference (pd - pu) (kg/m³)
-    hH     = np.zeros((lin),float)     # ratio of he/H (-).
+    v1mode   = np.zeros((lin),float)    # model sensitivity V1
+    v2mode   = np.zeros((lin),float)    # model sensitivity V2
 
-# isotherms
+# three-layer system:
+    h1 = np.zeros((lin),float)     # 1st layer thickness (m)
+    h2 = np.zeros((lin),float)     # 2nd layer thickness (m)
+    h3 = np.zeros((lin),float)     # 3rd layer thickness (m)
+    p1 = np.zeros((lin),float)     # average density of 1st layer (kg/m³)
+    p2 = np.zeros((lin),float)     # average density of 2nd layer (kg/m³)
+    p3 = np.zeros((lin),float)     # average density of 3rd layer (kg/m³)
+
+    pu = np.zeros((lin),float)     # "surface" density (1m above) (kg/m³)
+    pd = np.zeros((lin),float)     # "bottom" density (2m from btm) (kg/m³)
+    hH = np.zeros((lin),float)     # ratio of he/H (-).
+
+# isotherms:
     isoa = np.zeros((lin),float)     # isotherm 'a' (m) 
     isob = np.zeros((lin),float)     # isotherm 'b' (m) 
     isoc = np.zeros((lin),float)     # isotherm 'c' (m) 
     isod = np.zeros((lin),float)     # isotherm 'd' (m) 
 
-# classification
-
+# classification:
     genera = np.zeros((lin),float)   # class. of internal seiche generation
-    iw_up = np.zeros((lin),float)    # supperr limit for internal seiche formation 
-    iw_dw = np.zeros((lin),float)    # lower limit for internal wave formation
+    iw_up = np.zeros((lin),float)    # upper limit for BSIW formation 
+    iw_dw = np.zeros((lin),float)    # lower limit for BSIW formation
     
-# parameters in 2d (vector[time][depth])
-    bvf2d = np.zeros((lin,qt-1),float)  # Brunt-Vaisalla frequency (rad*Hz)
+# two-dim parameters (vec[time, depth]):
     riw2d = np.zeros((lin,qt-1),float)  # Richardson Number (-)
     hzmid = np.zeros((lin,qt-1),float)  # z depth at middle point (m from the ref. level)
-    gli2d = np.zeros((lin,qt-1),float)  # Reduced gravity (m)
-
-# model sensibility 
-
-    v1mode   = np.zeros((lin),float) 
-    v2mode   = np.zeros((lin),float) 
 
 # wind parametrization
     sdur  = np.zeros((lin),float) # wind stress with duration filter
     sdir  = np.zeros((lin),float) # wind stress with duration and direction
 
     dw_hom  = np.zeros((lin),float)
-    dw_lit = np.zeros((lin),float)  # Wedderburn number according to literature criteria (wind direction)
-    dw_spi  = np.zeros((lin),float) # Wedderburn number according to Spigel et al. (wind direction)
+    dw_lit = np.zeros((lin),float)  # W according to literature criteria 
+    dw_spi  = np.zeros((lin),float) # W according to Spigel et al.
     
-    ridu = np.zeros((lin),float) # Ri with duration filter
-    ridi = np.zeros((lin),float) # Ri
-
+    wedu = np.zeros((lin),float) # W filtered by wind duration 
+    wedi = np.zeros((lin),float) # W filtered by wind direction 
 
 # -----------------------------------------------------------------------------
-#                  COMPUTATION OF PARAMETERS AND INDICES 
+# COMPUTATION OF PARAMETERS AND INDICES 
 # -----------------------------------------------------------------------------  
   
     print ("> ")
@@ -311,45 +306,14 @@ def main():
     print ("> "+str(round(load_time-start_time,4))+' seconds')
     root.update()   
     
-# Compute the wind fetch [min, ave, max] --------------------------------------
-
-    iw       = mod.velocityten(wind, rw)      # convert wind for 10 m high   
-    dw_mean  = mod.wind_average(dw,iw)
+# wind fetch - ls_fetch(min, mean, max):
+    iw       = mod.velocityten(wind, rw)    # convert wind for 10 m high   
+    dw_mean  = mod.wind_average(dw,iw)      # wind direction average
     
-    hmean    = np.mean(h,axis=0)
+    hmean    = np.mean(h,axis=0) 
 
-    if type_length == 1: 
-        ls_fetch = [len_basin, 0.95*len_basin, 1.05*len_basin]
-                       
-    elif type_length == 2:       
-        Lw_cont  = mod.windbar_fetch(dw_mean,linang,angle,dists)
-        
-        try:
-            ls_min = np.nanmin(Lw_cont)
-            ls_max = np.nanmax(Lw_cont)
-            ls_ave = np.nanmean(Lw_cont)
-            ls_fetch = [ls_min,ls_ave,ls_max]  
+    ls_fetch = mod.wind_fetch(dw_mean,linang,angle,dists,type_length,dig)
             
-            if np.isnan(Lw_cont).all() == True:
-                ls_near  = dists[mod.find_nearest(angle,dw_mean)[1]]
-                ls_fetch = [ls_near,0.95*ls_near,1.05*ls_near]
-                
-                dig.write('> Warning: data from .fet is to coarse to identify the \n')
-                dig.write('> variability of the wind fetch \n')
-                dig.write('> The wind fetch was estimeted based on the nearest available\n')
-                dig.write('> fetch of the mean wind direction considering 95% confidence interval\n\n\n') 
-            
-        except :
-            ls_near  = dists[mod.find_nearest(angle,dw_mean)[1]]
-            ls_fetch = [ls_near,0.95*ls_near,1.05*ls_near]
-            dig.write('> Warning: data from .fet is to coarse to identify the \n')
-            dig.write('> variability of the wind fetch \n')
-            dig.write('> The wind fetch was estimeted based on the nearest available\n')
-            dig.write('> fetch of the mean wind direction considering 95% confidence interval\n\n\n')
-
-           
-# -----------------------------------------------------------------------------
-
     print ("--------------------------------------------------------------------------------------")
     root.update()
     print('> ')
@@ -358,21 +322,13 @@ def main():
     root.update()  
     print('> ')
     root.update()
-    
-# Output of functions:
-#    
-# vector aux - original vector = one dimension reduction (espatial reduction)
-#
-# auxtem          temp - [array float 2d] temperature     (°C)
-# auxh            h    - [array float 2d] elevation       (m from 800m)
-# auxean          ean  - [array float 1d] water level     (m from 800m)
-# auxiw           iw   - [array float 1d] wind velocity   (m/s)
-# auxdw           dw   - [array float 1d] wind direction  (°)
-# auxra           ra   - [array float 1d] solar radiation (W/m²)
+
+# temporal parameters:
 
     consecutive_dire, consecutive_wind, ver_dire, ver_wind = 0,0,0,0
     auxisa, auxisb, auxisc, auxisd = None, None, None, None
     war3,warmode1, warmode2 = 0,0,0
+    error_thermo = 0
 
     for t in range(lin):
    
@@ -398,24 +354,33 @@ def main():
             if (tau[3] != -999):
                 isod[t] = mod.isotherms(tau[3],qt,auxh,auxtem_ordered,max_ean,min_ean,auxisd)
                 auxisd = isod[t]
-    
+        
     # 2layer structure
-        he[t], hh[t], pe[t], ph[t], glin[t], n[t], pu[t], pd[t] = mod.structure2layer(qt, auxh, auxtem_ordered, auxean, z0)      
+        he[t], hh[t], pe[t], ph[t], glin[t], n[t], pu[t], pd[t], prox_thermo = mod.structure2layer(qt, auxh, auxtem_ordered, auxean, z0)      
+        error_thermo = prox_thermo + error_thermo
 
         ht[t] = ean[t] - he[t]
         hH[t] = he[t]/(he[t]+hh[t])
         
+        Hbar[t] = np.sqrt((he[t]+hh[t])/(he[t]*hh[t]))
+            
+        try:    
+            Pbar[t] = np.sqrt(ph[t]/(ph[t]-pe[t]))
+        except:
+            try:
+                Pbar[t] = None
+            except:
+                Pbar[t] = None
+        
         if (hH[t] > 0.5):
             hH[t] = 1 - hH[t]
-            
-        pm[t] = (pd[t]+pu[t])/2    
+              
         strs[t], wast[t], riw[t] = mod.wind_parameters(auxiw, rw, pe[t], he[t], n[t], glin[t], auxean)
         
     # 2d parameters  
         p, n2, hmid, gli2d    = mod.thermal_stability(qt,auxh,auxean,auxtem)
         riw2 = mod.richardson(auxiw,rw,qt,auxh,pe[t],auxean,n2,hmid,p,gli2d)
     
-        bvf2d[t][:] =   n2[:]
         riw2d[t][:] = riw2[:]
         hzmid[t][:] = hmid[:]
     
@@ -428,10 +393,8 @@ def main():
             tbsiw = 2*ls_fetch[1]/np.sqrt(glin[t]*he[t]*hh[t]/(he[t]+hh[t])) # Merian
         except RuntimeWarning:
             tbsiw = None
-            
-            dig.write('> Warning: Merian equation was not computed \n')
-            dig.write('> The Ri will not be filtered considering the duration of the wind event\n\n\n')
-                      
+            war.merian(dig)
+      
         dw_hom[t] = None
         
         max_spigel = ls_fetch[1]*(he[t]+hh[t])/(4*he[t]*hh[t])
@@ -441,20 +404,39 @@ def main():
         
         if min_spigel < 1:             # verify the minimum W for IW activity
             wedd_aux = min_spigel
-            
-        if(wedd[t] < 20 and wedd[t] > wedd_aux ):
-            dw_lit[t] = dw[t]
-        else:
-            dw_lit[t] = None
+
+        winsiz = int(0.25/2*tbsiw/dt/3600)
+        points = t-winsiz
+        polong = t-int(2*winsiz)
     
-        if (wedd[t] < max_spigel) and (wedd[t] > min_spigel):
-            dw_spi[t] = dw[t]
+        
+        
+        if points < 1: points = 0
+        if polong < 1: polong = 0
+            
+        try: wedd_mean = np.nanmean(wedd[points:t+1])
+        except: wedd_mean = wedd[t]       
+        
+        if(wedd_mean < 20 and wedd_mean > wedd_aux ):
+            
+            try: dw_lit[t] = mod.wind_average(dw[points:t+1],iw[points:t+1])
+            except: dw_lit[t] = dw[t]
+                
+        else: dw_lit[t] = None
+    
+        if (wedd_mean < max_spigel) and (wedd_mean > min_spigel):
+            
+            try: dw_spi[t] = mod.wind_average(dw[points:t+1],iw[points:t+1]) 
+            except: dw_spi[t] = dw[t]
         
             if(consecutive_wind > 0):
-                wmin, wmax = mod.wind_angle(dw[t-1],linang)
+                                
+                wmin, wmax = mod.wind_angle(np.mean(dw[polong:polong+winsiz+1]),linang)
                 
+                dw10 = mod.wind_average(dw[points:t+1],iw[points:t+1]) 
+                                
                 if wmin > wmax:
-                    if( dw[t] >= wmin or dw[t] <= wmax):
+                    if( dw10 >= wmin or dw10 <= wmax):
 
                         consecutive_dire = consecutive_dire + 1
                         dw_hom[t] = 357
@@ -465,7 +447,7 @@ def main():
                 
                         consecutive_dire = 0                
                 else:                    
-                    if( dw[t] >= wmin and dw[t] <= wmax):
+                    if( dw10 >= wmin and dw10 <= wmax):
                     
                         consecutive_dire = consecutive_dire + 1
                         dw_hom[t] = 357
@@ -492,17 +474,13 @@ def main():
         
     # 3layer structure    
         h1[t],h2[t],h3[t],p1[t],p2[t],p3[t] = mod.structure3layer(qt, auxh, auxtem, minval, auxean, z0)
-    
-        if h1[t] == 999:
-            
+        
+        if h1[t] == -999:            
             war3  = war3 + 1 
-            h1[t] = he[t] - 0.05*he[t]
-            h2[t] = 0.05*(he[t]+hh[t]) 
-            h3[t] = hh[t] - 0.05*hh[t]
+            h1[t],h2[t],h3[t],p1[t],p2[t],p3[t] = mod.approx_layer(he[t],hh[t],pe[t],ph[t])
             
-            p1[t] = pe[t]
-            p2[t] = (pe[t]+ph[t])/2
-            p3[t] = ph[t]
+            
+
     
     # Generation of internal seiches according to Ri, hh, he, wind fetch 
     #
@@ -514,9 +492,9 @@ def main():
     #    4 = Internal seiche with short amplitude.
     
         genera[t] = mod.class_generation(riw[t],hh[t],he[t],ls_fetch[1])
-        iw_dw[t], iw_up[t] = mod.iw_generation(riw[t],hh[t],he[t],ls_fetch[1])
+        iw_dw[t], iw_up[t] = mod.iw_generation(wedd[t],hh[t],he[t],ls_fetch[1])
 
-        _,v1mode[t],_ = np.real(miw.disp_xmodel2(pe[t],ph[t],he[t],hh[t],ls_fetch,1))
+        _,v1mode[t],_ = np.real(miw.disp_zmodel(pe[t],ph[t],he[t],hh[t],ls_fetch,1))
         _,v2mode[t],_ = np.real(miw.disp_xmodel3(p1[t],p2[t],p3[t],h1[t],h2[t],h3[t],ls_fetch,2,1))
     
     # it is difficult occurs a change in this order (5h in a short dt)
@@ -528,22 +506,12 @@ def main():
             v1mode[t] = v1mode[t-1]
             warmode1 = warmode1 + 1
 
-    if warmode1 > 0:
-        dig.write('> Warning: V1H1 period has been estimated from time averaged profiles  \n')
-        dig.write('> '+str(int(100*warmode1/lin))+'% of the total analyzed period \n')
-        dig.write('> It may occurs due to the difficulty to Interwave Analyzer identify the two-layer structure \n\n\n')         
+    if warmode1 > 0: war.profile_structure(dig,1,100*warmode1/lin)
+    if warmode2 > 0: war.profile_structure(dig,2,100*warmode1/lin)
+
+    if war3 > 0: war.metalimnion(dig,100*war3/lin)
+    if error_thermo > 0: war.thermocline(dig,100*error_thermo/lin) 
         
-    if warmode2 > 0:
-        dig.write('> Warning: V2H1 period has been estimated from time averaged profiles \n')
-        dig.write('> '+str(int(100*warmode2/lin))+'% of the total analyzed period \n')
-        dig.write('> It may occurs due to the difficulty to Interwave Analyzer identify the three-layer structure in a determined period\n\n\n')         
-
-
-    if war3 > 0:
-        dig.write('> Warning: Metalimnion borders have not been computed '+str(int(100*war3/lin))+'% of the total analyzed period \n')
-        dig.write('> In this case metalimnion thickness is assumed to be 5% of the total water depth \n')         
-        dig.write('> and the metalimnion density, a simple average between epilimnion and hypolimnion \n\n\n') 
-
     iso = [isoa, isob, isoc, isod]
 
 # period is devided into three shorter sub-periods
@@ -552,7 +520,7 @@ def main():
     group = [genera[i:i+int(lin/3)] for i in range(0, len(genera), int(lin/3))]
     hH_gp = [hH[i:i+int(lin/3)] for i in range(0, len(hH), int(lin/3))]
     wi_gp = [wedd_inv[i:i+int(lin/3)] for i in range(0, len(wedd_inv), int(lin/3))]
-    
+
     
     h_lim1 = mod.ci(hH_gp[0])    # define the aveage of he/H of subperiod P1
     W_lim1 = mod.ci(wi_gp[0])    # deifne the aveage of W    of subperiod P1
@@ -571,6 +539,10 @@ def main():
     P3    = [dx_gp[2][0], dx_gp[2][-1]]
 
 # average of some variables
+
+    mean_temp,low_temp,high_temp = mod.mean_confidence_interval(tempa)
+    mean_h    = np.mean(h,axis=0)
+    
     m_pe   = np.nanmean(pe)
     m_ph   = np.nanmean(ph)
     m_he   = np.nanmean(he)
@@ -593,12 +565,8 @@ def main():
     try:
         m_dw_spi= np.nanmean(dw_spi)
     except RuntimeWarning:
-        dig.write('> Warning: the mean wind direction considering a homogeneous wind event \n')
-        dig.write('> under the Spigel and Imberger (1980) conditions has not been computed \n')
-        dig.write('> The program could not indentified a homogeneous wind direction\n\n\n')
- 
+        war.homogeneous_condition(dig) 
         m_dw_spi = -999
-
 
     print (">         Parameters were defined")
     root.update() 
@@ -625,8 +593,8 @@ def main():
         if(fdire == 0):
             fdire = 1
 
-        ridu[t] = riw[t]/fdura
-        ridi[t] = riw[t]/fdire
+        wedu[t] = wedd[t]/fdura
+        wedi[t] = wedd[t]/fdire
     
 #
 # averaged water density and layer thickness for higher vertical modes
@@ -650,36 +618,53 @@ def main():
     cp = np.sqrt(m_glin*m_he*(1-m_he/(m_he+m_hh)))  
 
 # theoretical periods
-    pzv1h1 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,1))
+       
+        
+    pv1h1 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,1))
+    pv1h2 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,2))
+    pv1h3 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,3))
 
-    pxv1h1 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,1))
-    pxv1h2 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,2))
-    pxv1h3 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,3))
+    pv2h1 = np.array(miw.disp_xmodel3(m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,2,1))
+    pv2h2 = np.array(miw.disp_xmodel3(m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,2,2))
+    pv2h3 = np.array(miw.disp_xmodel3(m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,2,3))
 
-    pxv2h1 = np.array(miw.disp_xmodel3(m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,2,1))
-    pxv2h2 = np.array(miw.disp_xmodel3(m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,2,2))
-    pxv2h3 = np.array(miw.disp_xmodel3(m_p1,m_p2,m_p3,m_h1,m_h2,m_h3,ls_fetch,2,3))
-
-    pxv3h1 = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,1))
-    pxv3h2 = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,2))
-    pxv3h3 = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,3))
+    pv3h1 = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,1))
+    pv3h2 = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,2))
+    pv3h3 = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,3))
 
 #  internal wave frequency (without and with Earth rotation effect)
-    fz_11  = 1/pzv1h1
-        
-    omega_e = 7.291*10**-5
+       
+    omega_e = 7.2921*10**-5
     lat_rad = np.radians(lat)
-
-    Bu      = (m_n*(m_he+m_hh)/(omega_e*ls_fetch[1]))**2
 
     fc      = 2*omega_e*np.sin(lat_rad)
     fo      = abs(fc/(2*np.pi))
 
-    fx_11, cfx11  = 1/pxv1h1, 1/miw.coriolis_effect(fc,pxv1h1)
-    fx_21, cfx21  = 1/pxv2h1, 1/miw.coriolis_effect(fc,pxv2h1)
-    fx_31, cfx31  = 1/pxv3h1, 1/miw.coriolis_effect(fc,pxv3h1)
+    if fc != 0:
+        Bu = m_n**2*(m_he+m_hh)**2/(fc**2*ls_fetch[1]**2)
+    else:
+        Bu = 0
 
-# model sensitivity using the hydrostatic model   
+    f11, cf11  = 1/pv1h1, 1/miw.coriolis_effect(fc,pv1h1)
+    f21, cf21  = 1/pv2h1, 1/miw.coriolis_effect(fc,pv2h1)
+    f31, cf31  = 1/pv3h1, 1/miw.coriolis_effect(fc,pv3h1)
+
+# model sensitivity using the hydrostatic model  
+
+    sens_met = []
+    delta = minval/2
+    delta_variation = np.linspace(delta,delta+minval,15)
+    
+    for i in delta_variation:
+        hus,hms,hbs,pus,pms,pbs = mod.structure3layer(qt, mean_h, mean_temp, i, np.mean(ean), z0)
+        
+        try:
+            _,sens,_  =miw.disp_xmodel3(pus,pms,pbs,hus,hms,hbs,ls_fetch,2,1)
+            sens_met.append(sens)
+        except:
+            sens_met.append(None)
+    
+             
     xpe, v1h1_spe = miw.sensitivity_2layer(m_pe,drho,lp_sen,m_pe,m_ph,m_he,m_hh,ls_fetch,1)
     xph, v1h1_sph = miw.sensitivity_2layer(m_ph,drho,lp_sen,m_pe,m_ph,m_he,m_hh,ls_fetch,2)
     xhe, v1h1_she = miw.sensitivity_2layer(m_he,ddep,lh_sen,m_pe,m_ph,m_he,m_hh,ls_fetch,3)  
@@ -732,13 +717,11 @@ def main():
 # ------------------------------ spectral depth -------------------------------
 
     if int(autoff_wsuser) == 1:
-        if pxv1h1[1] != None:   
-            windsizeuser = 10*pxv1h1[1]
+        if pv1h1[1] != None:   
+            windsizeuser = 10*pv1h1[1]
         else:
             windsizeuser = 5*24*60*60
-            dig.write('> Warning: due to model instability, welch averaging has been changes to 5 days \n\n\n')
-            dig.write('> '+str(int(100*warmode1/lin))+'% of the total analyzed period \n')
-            dig.write('> It may occurs due to the difficulty to Interwave Analyzer identify the two-layer structure \n\n\n')                 
+            war.welch_average(dig,100*warmode1/lin)              
 
     sensor_filtered = []
     timee           = []
@@ -746,9 +729,11 @@ def main():
     power_sensor    = []
     freqe           = []
     welch_sensor    = []
+    wr_sensor       = []
+    conf_sensor     = []
     
     if filter_process == 1 :  # define the range of the bandpass filter
-        low1, high1 = 1/((pxv1h1[2]/60)/60), 1/((pxv1h1[0]/60)/60) # banded through internal wave model V1H1 (lower mode)
+        low1, high1 = 1/((pv1h1[2]/60)/60), 1/((pv1h1[0]/60)/60) # banded through internal wave model V1H1 (lower mode)
 
     else:
         low1, high1 = 1/high_per, 1/low_per
@@ -756,7 +741,7 @@ def main():
     if turn_temp == 1:
         
         
-        for index in range(qt):   # spectral analysis for all sensors
+        for index in range(qt):   # spectral analysis for all sensors (multi-layer psd needs that information)
         
             new = temp[:,index]
             fs = 1/dt
@@ -765,12 +750,11 @@ def main():
                 filtered_band = mod.butter_bandpass_filter(new, low1, high1, fs)
             except ValueError:
                 filtered_band = None
-                dig.write('> Warning: the temperature signals from one or more sensors\n')
-                dig.write('> have not been band pass-filtered \n\n\n')
- 
+                war.bandpass(dig,'sensor')
             
+ 
             aux_time, aux_per, aux_power = mod.wave_spectral ( new, dt, mother)
-            aux_freq, aux_wl_per, aux_welch = mod.welch_method(new,windsizeuser,window, dt)
+            aux_freq, aux_wl_per, aux_welch, aux_wr, aux_conf = mod.welch_method(new,windsizeuser,window, dt)
         
             sensor_filtered.append(filtered_band)
 
@@ -779,6 +763,8 @@ def main():
             power_sensor.append(aux_power)
             freqe.append(aux_freq) 
             welch_sensor.append(aux_welch)
+            wr_sensor.append(aux_wr)
+            conf_sensor.append([aux_conf])
 
         
         
@@ -796,7 +782,7 @@ def main():
     
 
     if filter_process == 1 :        # define the range of the bandpass filter
-        lowcut, highcut  = 1/((pxv1h1[2]/60)/60), 1/((pxv1h1[0]/60)/60)
+        lowcut, highcut  = 1/((pv1h1[2]/60)/60), 1/((pv1h1[0]/60)/60)
     else:
         lowcut, highcut  =  1/high_per, 1/low_per
 
@@ -806,24 +792,34 @@ def main():
     per_temp  = []
     band      = []
     welch     = []
+    wr        = []
+    conf      = []
 
     iso_corrected = np.zeros(4,float)
 
 
     if (turn_iso == 1):
         ean_norm  = ean  - np.mean(ean)
+        
         for i in range(4):
-            if(tau[i] != -999):
-                aux_time, aux_per, aux_power = mod.wave_spectral (iso[i], dt, mother)
             
-                aux_freq, _, aux_welch = mod.welch_method(iso[i],windsizeuser,window, dt)
+            if np.isnan(iso[i]).all() == True and tau[i]!=-999:
+                war.isotherm_boundary(dig, str(tau[i]))
+                tau[i] = -999        
+            
+            if(tau[i] != -999):
+                
+                aux_time, aux_per, aux_power = mod.wave_spectral (iso[i], dt, mother)
+                aux_freq, _, aux_welch, aux_wr, aux_conf = mod.welch_method(iso[i],windsizeuser,window, dt)
+                    
+                
                 fs = 1/dt
                 
                 try:
                     aux_band = mod.butter_bandpass_filter(iso[i], lowcut, highcut, fs)
                 except ValueError:
                     aux_band = None
-                    dig.write('> Warning: one or more isotherms have not been band pass-filtered\n\n\n')
+                    war.bandpass(dig,'isotherm')
                 
                 iso_corrected[i] = np.mean(abs((iso[i] - np.mean(iso[i])) - ean_norm))
     
@@ -833,30 +829,36 @@ def main():
                 freq.append(aux_freq) 
                 welch.append(aux_welch)  
                 band.append(aux_band)
+                wr.append(aux_wr)
+                conf.append(aux_conf)
             else:
                 time_temp.append(0)
                 per_temp.append(0)
                 power.append(0)
                 freq.append(0) 
                 welch.append(0)  
-                band.append(0)    
+                band.append(0)
+                wr.append(0)
+                conf.append([0])
     
-    band_max  = [np.nanmax(abs(band[0])),np.nanmax(abs(band[1])),np.nanmax(abs(band[2])),np.nanmax(abs(band[3]))]
+    banda = []
+    for i in range(4):
+        banda.append(np.nanmax(abs(band[i])))
 
-    amax = max(band_max)
-    aind = tau[np.where(band_max == amax)]
+    amax = max(np.array(banda))
+    aind = tau[np.where(banda == amax)]
          
        
 # spectral analysis of the solar radiation
-
-    solar_ws = 5*24*60*60
-    time_sol, per_sol, power_sol     = mod.wave_spectral ( ra, dt, mother)
-    freq_sol, wl_aper_sol, welch_sol = mod.welch_method (ra, solar_ws, window, dt)
+    if rad == 1:
+        solar_ws = 5*24*60*60
+        time_sol, per_sol, power_sol     = mod.wave_spectral ( ra, dt, mother)
+        freq_sol, wl_aper_sol, welch_sol, wr_sol, conf_sol = mod.welch_method (ra, solar_ws, window, dt)
 
 #spectral analysis of wind intensity
 
     time_win, per_win, power_win     = mod.wave_spectral ( iw, dt, mother)
-    freq_win, wl_aper_win, welch_win = mod.welch_method (iw, windsizeuser, window, dt)
+    freq_win, wl_aper_win, welch_win, wr_win, conf_win = mod.welch_method (iw, windsizeuser, window, dt)
 
 # Coherence (isotherms and meteorological data)
 #
@@ -889,14 +891,7 @@ def main():
                 c95ws.append(a4)
             
                 s_filtered.append(sensor_filtered[seu[i]])
-
-                if sen[0] == 1:
-                    phr1, car1, far1, c951r = mod.coherence_shift(new, ra, windsizeuser, dt)
-                else:
-                    phr1, car1, far1, c951r = 0,0,0,0
-            
-            
-        
+                    
             else:
                 phws.append(None)
                 caws.append(None)
@@ -918,9 +913,9 @@ def main():
                         ni = temp[:,seu[i]]
                         nj = temp[:,seu[j]]
                 
-                        ph, coh, f, c95 = mod.coherence_shift(ni,nj,windsizeuser,dt)
+                        ph_aux, coh, f, c95 = mod.coherence_shift(ni,nj,windsizeuser,dt)
                 
-                        phij.append(ph)
+                        phij.append(ph_aux)
                         cohij.append(coh)
                         fij.append(f)
                         c95ij.append(c95)
@@ -939,7 +934,9 @@ def main():
     if (turn_iso == 1):
 
         phw, caw, faw, c95aw = mod.coherence_shift(iso[aux_iso], iw, windsizeuser, dt)
-        phr, car, far, c95ar = mod.coherence_shift(iso[aux_iso], ra, windsizeuser, dt)   
+        
+        if rad == 1:
+            phr, car, far, c95ar = mod.coherence_shift(iso[aux_iso], ra, windsizeuser, dt)   
 
 
         phiso = []
@@ -978,31 +975,35 @@ def main():
     tt, ithermo = mod.find_nearest(hl,m_ht) 
     templ_ordered = mod.sorting_2d(templ)
     
+    ri_wind = np.nanmin(mod.average(riw,(0.25/2)*(dura/(60*60)/dt)))
+    we_wind = np.nanmin(mod.average(wedd,(0.25/2)*(dura/(60*60)/dt)))
+       
 # outputs:
 # tt: thermocline depth according to countourf interpolation
 # ithermo: indice on 'hl' 
 # -----------------------------------------------------------------------------
     
-
-    for t in range(lin):   
-        thermo_temp[t] = templ[t][ithermo]
-
-
+    
 # -----------------------------------------------------------------------------
 # Thorpe scale
         
     tho = np.zeros((lin,len(templ[0])),float)
     
-    for i in range(lin):
-        tho[i,:] = templ[i,:] - templ_ordered[i,:]     # Thorpe scale    
+    for t in range(lin):
+        
+        thermo_temp[t] = templ[t][ithermo]
+        
+        for z in range(qt):
+            _, index_thorpe = mod.find_nearest(templ_ordered[t,:],templ[t,z])
+            tho[t,z] = hl[z] - hl[index_thorpe]     # Thorpe scale    
 
 
 # spectral analysis of the thermocline 
 
     tthermo, pthermo, powerthermo = mod.wave_spectral (thermo_temp, dt, mother)
     
-    freqthermo, wlthermo, welchthermo = mod.welch_method(thermo_temp,windsizeuser,window, dt)
-    freq_ean, wl_aper_ean, welch_ean  = mod.welch_method(ean,windsizeuser,window, dt)
+    freqthermo, wlthermo, welchthermo, wrthermo, confthermo = mod.welch_method(thermo_temp,windsizeuser,window, dt)
+    freq_ean, wl_aper_ean, welch_ean, wr_ean, conf_ean  = mod.welch_method(ean,windsizeuser,window, dt)
 
     print (">         Spectral analysis was computed")
     root.update()
@@ -1031,16 +1032,23 @@ def main():
             if(tau[i]!=-999):
                 np.savetxt(output_path+'textfiles/spectral_isotherms'+str(tau[i])+'.txt', np.column_stack((freq[i],welch[i])), delimiter='\t', header='freq(Hz)\tPSD(oC²/Hz)', fmt='%0.8f %0.15f')                
                 np.savetxt(output_path+'textfiles/isotherms'+str(tau[i])+'.txt',np.column_stack((time_temp[i],iso[i])), delimiter='\t', header='time(hour)\tisotherm(oC)', fmt='%0.8f %0.5f')
+                np.savetxt(output_path+'textfiles/rednoise_isotherms'+str(tau[i])+'.txt', np.column_stack((wr[i],conf[i])), delimiter='\t', header='freq(Hz)\tPSD(oC²/Hz)', fmt='%0.8f %0.15f')
                 
     if turn_temp == 1:
         for i in range(4):
             if(sen[i]==1):
                 np.savetxt(output_path+'textfiles/spectral_sensor'+str(seu[i])+'.txt',np.column_stack((freqe[seu[i]],welch_sensor[seu[i]])), delimiter='\t', header='freq(Hz)\tPSD(m²/Hz)', fmt='%0.8f %0.15f')
-    
+               
     np.savetxt(output_path+'textfiles/wind.txt',np.column_stack((time_win,dw,iw,strs)), delimiter='\t', header='time(hour)\tdirection(o)\tspeed(m/s)\tstress(N/m²)', fmt='%0.8f %0.1f %0.3f %0.6f')
     np.savetxt(output_path+'textfiles/spectral_wind.txt',np.column_stack((wl_aper_win,welch_win)), delimiter='\t', header='period(hour)\tPSD wind((m/s)²/Hz)', fmt='%0.3f %0.5f')
-    np.savetxt(output_path+'textfiles/spectral_solar.txt',np.column_stack((wl_aper_sol,welch_sol)), delimiter='\t', header='period(hour)\tPSD sw((W/m²)²/Hz)', fmt='%0.3f %0.5f')
     np.savetxt(output_path+'textfiles/stability.txt',np.column_stack((time_win,riw,wedd)), delimiter='\t', header='time(hour)\t Ri(-)\tWedderburn(-)', fmt='%0.3f %0.8f %0.8f')
+    np.savetxt(output_path+'textfiles/thermocline.txt',np.column_stack((time_win,he)), delimiter='\t', header='time(hour)\tthermocline depth(m)', fmt='%0.3f %0.4f')
+    np.savetxt(output_path+'textfiles/metalimnion_thickness.txt',np.column_stack((time_win,h2)), delimiter='\t', header='time(hour)\tmetalimnion thickness(m)', fmt='%0.3f %0.4f')
+    np.savetxt(output_path+'textfiles/internal_periods.txt',np.column_stack((time_win,v1mode, v2mode)), delimiter='\t', header='time(hour)\tV1H1 period(s)\tV2H1 period(s)', fmt='%0.3f %0.4f %0.4f')
+    np.savetxt(output_path+'textfiles/mean_profile.txt',np.column_stack((mean_h,mean_temp)), delimiter='\t', header='mab\ttemperature (dC)', fmt='%0.3f %0.4f')
+    
+    if rad == 1:
+        np.savetxt(output_path+'textfiles/spectral_solar.txt',np.column_stack((wl_aper_sol,welch_sol)), delimiter='\t', header='period(hour)\tPSD sw((W/m²)²/Hz)', fmt='%0.3f %0.5f')
 
 # -----------------------------------------------------------------------------    
     print ("> Part VI       Plotting graphs and making reports... ")
@@ -1073,7 +1081,7 @@ def main():
                 ax2.set_title('(b)',loc='left')
 
                 graph.isotherm(dx,time_temp[i],iso[i],'navy',tau[i],ax1)
-                graph.wavelet(dx,per_temp[i], power[i], show_on, ax2)
+                graph.wavelet_iso(dx,per_temp[i], power[i], show_on, ax2)
                 
                 plt.savefig(output_path+'iso'+str(i)+'.png', dpi = depi)
     
@@ -1089,8 +1097,8 @@ def main():
     ax3.set_title('(c)',loc='left')
 
     graph.thermocline(dx, tthermo,thermo_temp,'navy',round(m_ht, 2),ax1)
-    graph.wavelet(dx, pthermo, powerthermo, show_on, ax2)
-    graph.psd_thermocline(wlthermo,welchthermo,'navy',int(tt),ax3)
+    graph.wavelet_iso(dx, pthermo, powerthermo, show_on, ax2)
+    graph.psd_thermocline(wlthermo,welchthermo,'navy',int(tt),wrthermo,confthermo,ax3)
 
     plt.setp(ax3.get_yticklabels(), visible=False)
     plt.savefig(output_path+'thermocline_analysis.png', dpi = depi)
@@ -1121,14 +1129,25 @@ def main():
     plt.savefig(output_path+'wedderburn_stress.png',dpi = depi)
 
 
+    plt.figure(figsize=(6,5))
+    ax1 = plt.subplot2grid((1,1),(0,0))
+
+    graph.psd_wind(wl_aper_win, welch_win, wr_win, conf_win, ax1)
+    
+    if rad ==1:
+        ax2 = ax1.twinx() 
+        graph.psd_sola(wl_aper_sol, welch_sol, wr_sol, conf_sol, ax2)
+
+    plt.savefig(output_path+'meteo_spectra.png', dpi = depi)
+
+
     plt.figure(figsize=(5,6))
     ax1 = plt.subplot2grid((1,1),(0,0))
 
-    graph.psd_wind(wl_aper_win, welch_win, ax1)
-    ax2 = ax1.twiny() 
-    graph.psd_sola(wl_aper_sol, welch_sol, ax2)
+    graph.psd_level(freq_ean, welch_ean, wr_ean, conf_ean, ax1)
 
-    plt.savefig(output_path+'meteo_spectra.png', dpi = depi)
+    plt.savefig(output_path+'level_spectra.png', dpi = depi)
+
 
     if turn_iso == 1:
 
@@ -1141,9 +1160,9 @@ def main():
         ax1.set_title('(a)',loc='left')
         ax2.set_title('(b)',loc='left')
 
-        graph.psd_isoz(tau, freq, welch, fz_11, largelen,m_n,fo, ax1)
+        graph.psd_iso(tau, freq, welch, f11, f21, f31, largelen,m_n,fo,wr,conf, ax1)
         
-        graph.coherence (caw,car,faw,far,tau,aux_iso, largelen, ax2)
+        graph.coherence (caw,faw,tau,aux_iso, largelen, ax2)
 
         plt.setp(ax2.get_yticklabels(), visible=False)
         plt.savefig(output_path+'psd_nonhydro.png', dpi = depi)
@@ -1157,23 +1176,28 @@ def main():
         ax1.set_title('(a) ',loc='left')
         ax2.set_title('(b) Coriolis correction',loc='left')
 
-        graph.psd_isox(tau, freq, welch, fx_11, fx_21, fx_31,largelen,m_n,fo, ax1)
+        graph.psd_iso(tau, freq, welch, f11, f21, f31,largelen,m_n,fo,wr,conf, ax1)
 
-    # this has the earth rotation effect
-        graph.psd_isox(tau, freq, welch, cfx11, cfx21, cfx31,largelen,m_n,fo, ax2)
+        # this has the earth rotation effect
+        graph.psd_iso(tau, freq, welch, cf11, cf21, cf31,largelen,m_n,fo,wr,conf, ax2)
 
         plt.setp(ax2.get_yticklabels(), visible=False)
         plt.savefig(output_path+'psd_hydro_coriois.png', dpi = depi)
 
 
-        plt.figure(figsize=(8,8))
+        plt.figure(figsize=(8,9))
 
-        ax1 = plt.subplot2grid((1,1),(0,0))
-        
-        graph.psd_isox(tau, freq, welch, fx_11, fx_21, fx_31,largelen,m_n,fo, ax1)
-        
-        plt.savefig(output_path+'psd_hydro.png', dpi = depi)
+        ax1 = plt.subplot2grid((2,1),(0,0))
+        ax2 = plt.subplot2grid((2,1),(1,0),sharex=ax1)
 
+        ax1.set_title('(a) ',loc='left')
+        ax2.set_title('(b) ',loc='left')
+
+        graph.psd_iso_conv(tau, freq, welch, f11, f21, f31,m_n,fo,wr,conf,'psd', ax2)
+        graph.psd_iso_conv(tau, freq, welch, cf11, cf21, cf31,m_n,fo,wr,conf,'var', ax1)
+
+        plt.setp(ax1.get_xticklabels(), visible=False)
+        plt.savefig(output_path+'psd.png', dpi = depi)
 
 
     plt.figure( figsize=(8,6))
@@ -1188,9 +1212,7 @@ def main():
     ax3.set_title('(c) - P2',loc='left')
     ax4.set_title('(d) - P3',loc='left')
 
-    met = m_h2
-
-    graph.degeneration(P1,P2,P3,h_lim1,h_lim2,h_lim3,W_lim1,W_lim2,W_lim3,m_pe,m_ph,met,m_he+m_hh,ls_fetch[1],ax1)
+    graph.degeneration(P1,P2,P3,h_lim1,h_lim2,h_lim3,W_lim1,W_lim2,W_lim3,m_pe,m_ph,m_h2,m_he+m_hh,ls_fetch[1],ax1)
 
     graph.generation(genera_0,ax2)
     graph.generation(genera_1,ax3)
@@ -1208,14 +1230,19 @@ def main():
     ax1.set_title('(a)',loc='left')  
     ax2.set_title('(b)',loc='left')
     
-    # average_wedda = np.nanmin(mod.average(riw,round(dura/(60*60)/dt),3))
-    average_wedda   = round(np.nanmin(wedd),4)
-    function_f      = 0.76 -  m_he/(m_he+m_hh)
-    paramet         = amax/(m_he*function_f)
+    mode1 = pv1h1[1]/3600/2
+    average_wedda   = np.nanmin(mod.average(wedi,mode1*0.25/2/dt))
+    parh  = m_he/(m_he+m_hh) 
     
-    graph.classification_genera(average_wedda, m_he/(m_he+m_hh),amax/m_he,aind, ax1)
-    graph.bueno_parameterization(average_wedda, paramet, aind, ax2)
 
+    g   = 12.156*(parh**3)-15.714*(parh**2)+2.8426*parh+2.0846
+    f   = g*np.exp((parh**2)/0.25)
+    paramet = 2*f**2*np.log(amax/(0.1*m_he))
+
+    graph.classification_genera(average_wedda, we_wind, parh,amax/m_he,aind, ax1)
+    graph.bueno_parameterization(average_wedda, we_wind, paramet, aind, ax2)
+
+    plt.tight_layout()
     plt.savefig(output_path+'classification_evolution.png', dpi = depi)
 
 
@@ -1230,10 +1257,8 @@ def main():
     ax2.set_title('(b) - Zooming',loc='left')
 
 
-    met = m_h2
-
-    graph.degeneration_evolution(P1,P2,P3,hH_gp,wi_gp,m_pe,m_ph,met,m_he+m_hh,ls_fetch[1],'no',ax1)
-    graph.degeneration_evolution(P1,P2,P3,hH_gp,wi_gp,m_pe,m_ph,met,m_he+m_hh,ls_fetch[1],'yes',ax2)
+    graph.degeneration_evolution(P1,P2,P3,hH_gp,wi_gp,m_pe,m_ph,m_h2,m_he+m_hh,ls_fetch[1],'no',ax1)
+    graph.degeneration_evolution(P1,P2,P3,hH_gp,wi_gp,m_pe,m_ph,m_h2,m_he+m_hh,ls_fetch[1],'yes',ax2)
 
     plt.savefig(output_path+'degenera_evolution.png', dpi = depi)
 
@@ -1247,7 +1272,7 @@ def main():
     ax1.set_title('(a)',loc='left')
     ax2.set_title('(b)',loc='left')
 
-    graph.richardson(dx,time_win,riw,iw_dw, iw_up, ax1)
+    graph.wedd_limit(dx,time_win,wedd,iw_dw, iw_up, ax1)
     graph.richardson2d(dx,time_win,hlm,riwl,ht,ean,z0,ax2)
     
 
@@ -1259,18 +1284,16 @@ def main():
 
     plt.figure(figsize=(8,6))
 
-    ax1 = plt.subplot2grid((3,2),(0,0))
-    ax2 = plt.subplot2grid((3,2),(0,1),sharex=ax1)
-    ax3 = plt.subplot2grid((3,2),(1,0),colspan=2, rowspan=3)
+    ax1 = plt.subplot2grid((3,1),(0,0))
+    ax2 = plt.subplot2grid((3,1),(1,0), rowspan=3, sharex=ax1)
 
     ax1.set_title('(a)',loc='left')
     ax2.set_title('(b)',loc='left')
-    ax3.set_title('(c)',loc='left')
 
-    graph.radiation(dx,time_win,ra,ax1)
-    graph.density(dx,time_win,pu,pd,pm,ax2)
-    graph.tempstructure_zoom(dx,time_win,hl,ht,templ,ean,ax3)
+    graph.density(dx,time_win,pu,pd,pe,ph,ax1)
+    graph.tempstructure_zoom(dx,time_win,hl,ht,templ,ean,z0,ax2)
 
+    plt.setp(ax1.get_xticklabels(), visible=False)
     plt.savefig(output_path+'structure_thermo.png',dpi = depi)
 
     plt.figure(figsize=(8,2.3))
@@ -1336,7 +1359,6 @@ def main():
 
     plt.savefig(output_path+'sensitivity_multiv.png', dpi = depi)
 
-
     plt.figure(figsize=(8,4))
 
     ax1 = plt.subplot2grid((1,2),(0,0))
@@ -1345,27 +1367,38 @@ def main():
     ax1.set_title('(a)',loc='left')
     ax2.set_title('(b)',loc='left')
 
-    graph.parabar_sensitivity(dep_bar,Pdep,'dep',ax1)
-    graph.parabar_sensitivity(rho_bar,Prho,'rho',ax2)
+    graph.parabar_sensitivity(dep_bar,Pdep,'dep',pv1h1[0],Hbar,pv1h1[2],ax1)
+    graph.parabar_sensitivity(rho_bar,Prho,'rho',pv1h1[0],Pbar,pv1h1[2],ax2)
 
     plt.savefig(output_path+'sensitivity_barparameters.png', dpi = depi)
 
+    plt.figure(figsize=(9,4))
+
+    ax1 = plt.subplot2grid((1,2),(0,0))
+    ax2 = plt.subplot2grid((1,2),(0,1))
+
+    ax1.set_title('(a)',loc='left')
+    ax2.set_title('(b)',loc='left')
+
+    graph.averaged_profile(mean_temp,low_temp,high_temp,mean_h, z0, ax1)
+    graph.sensibility_metalimnion(delta_variation,sens_met,minval,ax2)
+
+    plt.savefig(output_path+'mean_temperature.png', dpi = depi)
 
     plt.figure(figsize=(8,3))
 
     ax1 = plt.subplot2grid((1,1),(0,0))
-    graph.ri_compb(dx,time_win, riw, ridi, iw_dw, iw_up, ax1)
+    graph.wedd_compb(dx,time_win, wedd, wedi, iw_dw, iw_up, ax1)
 
-    plt.savefig(output_path+'ri_filtering.png',dpi = depi)
+    plt.savefig(output_path+'wedd_filtering.png',dpi = depi)
 
     if turn_iso == 1:
         plt.figure(figsize=(8,4))
         
         ax1 = plt.subplot2grid((1,1),(0,0))
-        graph.multi_isotherms(dx, iso, tau, time_temp, ax1)
+        graph.multi_isotherms(dx, iso, tau, time_temp, z0, ax1)
         
         plt.savefig(output_path+'isotherms.png',dpi = depi)
-
 
         if(ana1 != -999 or ana2 != -999):
             fig, ax1 = plt.subplots(figsize=(8,4))
@@ -1377,8 +1410,6 @@ def main():
         
 
             plt.savefig(output_path+'coherence.png',dpi = depi)
-
-
 
     plt.figure(figsize=(8,3))
     ax1 = plt.subplot2grid((1,1),(0,0))
@@ -1393,7 +1424,7 @@ def main():
         plt.figure(figsize=(8,4))
         ax1 = plt.subplot2grid((1,1),(0,0))
         if filter_process == 1:
-            ax1.set_title('Band-pass filter - Bandwidth: '+str(round(pxv1h1[2]/60/60,1))+' h to '+str(round(pxv1h1[0]/60/60,1))+' h',loc='left')
+            ax1.set_title('Band-pass filter - Bandwidth: '+str(round(pv1h1[2]/60/60,1))+' h to '+str(round(pv1h1[0]/60/60,1))+' h',loc='left')
         
         elif filter_process == 2:
             ax1.set_title('Band-pass filter - Bandwidth: '+str(round(low_per,1))+' h to '+str(round(high_per,1))+' h',loc='left')
@@ -1405,12 +1436,6 @@ def main():
         
         plt.setp(ax4.get_xticklabels(), visible=False)
         plt.savefig(output_path+'iso_bandpass.png',dpi = depi)
-
-
-    fig=plt.figure()
-    graph.wind_rose(iw,dw)
-
-    plt.savefig(output_path+'windrose.png',dpi = depi)
 
 
     if turn_temp == 1:
@@ -1428,33 +1453,17 @@ def main():
                 ids = seu[jd]
                 dep = temp[:,ids]
     
-                graph.isodepth(dx, timee[ids],dep,'navy',depth[jd],ax1)
+                graph.temperature(dx, timee[ids],dep,'navy',depth[jd],ax1)
                 graph.wavelet_depth(dx, per[ids], power_sensor[ids], timee[ids], ax2)
 
                 plt.savefig(output_path+'depth'+str(int(jd))+'.png', dpi =depi)
     
-    
-        plt.figure( figsize=(8,6))
-
-        ax1 = plt.subplot2grid((1,2),(0,0))
-        ax2 = plt.subplot2grid((1,2),(0,1),sharey=ax1)
-
-        ax1.set_title('(a)',loc='left')
-        ax2.set_title('(b)',loc='left')
-
-        graph.psd_depthz(sen, seu, depth, freqe, welch_sensor, fz_11, largelen,m_n,fo, ax1)
-        graph.coh_depthwind(caws,car1,faws,far1,depth, largelen,sen, ax2)
-
-            
-        plt.setp(ax2.get_yticklabels(), visible=False)
-        plt.savefig(output_path+'psd_nonhydro_depth.png', dpi = depi)
-
 
         plt.figure( figsize=(8,6))
         ax1 = plt.subplot2grid((1,1),(0,0))
         
-        graph.psd_multilayer(freqe[0],hmean[::-1],welch_sensor,fo,m_n,ax1)
-        plt.savefig(output_path+'psd_multiplayer.png', dpi = depi)
+        graph.psd_multilayer(freqe[0],hmean[::-1],welch_sensor,fo,m_n,z0,ax1)
+        plt.savefig(output_path+'psd_multi.png', dpi = depi)
 
         plt.figure( figsize=(8,6))
 
@@ -1464,8 +1473,8 @@ def main():
         ax1.set_title('(a)',loc='left')
         ax2.set_title('(b)',loc='left')
     
-        graph.psd_isox_depth(sen,depth, freqe, welch_sensor, fx_11, fx_21, fx_31,largelen,m_n,fo, ax1)
-        graph.psd_isox_depth(sen,depth, freqe, welch_sensor, cfx11, cfx21, cfx31,largelen,m_n,fo, ax2)
+        graph.psd_depth(sen,depth, freqe, welch_sensor, f11, f21, f31,largelen,m_n,fo,wr_sensor, conf_sensor, ax1)
+        graph.psd_depth(sen,depth, freqe, welch_sensor, cf11, cf21, cf31,largelen,m_n,fo,wr_sensor,conf_sensor, ax2)
 
         plt.setp(ax2.get_yticklabels(), visible=False)
 
@@ -1475,7 +1484,7 @@ def main():
         plt.figure( figsize=(6,6))
         ax1 = plt.subplot2grid((1,1),(0,0))
 
-        graph.psd_isox_depth(sen,depth, freqe, welch_sensor, fx_11, fx_21, fx_31,largelen,m_n,fo, ax1)
+        graph.psd_depth(sen,depth, freqe, welch_sensor, f11, f21, f31,largelen,m_n,fo,wr_sensor,conf_sensor, ax1)
 
 
         plt.savefig(output_path+'psd_hydro_depth.png', dpi = depi)
@@ -1493,7 +1502,7 @@ def main():
         plt.figure( figsize=(8,4))
         ax1 = plt.subplot2grid((1,1),(0,0))
         
-        graph.thermal_variation(dx, depth,seu,temp,time_win, 0, ax1)
+        graph.thermal_variation(dx, depth,seu,temp,time_win, ax1)
 
         plt.savefig(output_path+'temperature_depth.png',dpi = depi)
     
@@ -1503,7 +1512,7 @@ def main():
         ax1 = plt.subplot2grid((1,1),(0,0))
 
         if filter_process == 1:
-            ax1.set_title('Band-pass filter - Bandwidth: '+str(round(pxv1h1[2]/60/60,1))+' h to '+str(round(pxv1h1[0]/60/60,1))+' h',loc='left')
+            ax1.set_title('Band-pass filter - Bandwidth: '+str(round(pv1h1[2]/60/60,1))+' h to '+str(round(pv1h1[0]/60/60,1))+' h',loc='left')
         
         elif filter_process == 2:
             ax1.set_title('Band-pass filter - Bandwidth: '+str(round(low_per,1))+' h to '+str(round(high_per,1))+' h',loc='left')
@@ -1566,34 +1575,39 @@ def main():
     canvas.drawString(110, 455, 'Hypolimnion')
     canvas.drawString(180, 455,  str(round(m_p3,2))+' kg/m³')
 
-    g1 =ImageReader(output_path+'windrose.png')
-    canvas.drawImage(g1, 25, 190,width=250, height=250)
 
-  
-    g2 =ImageReader(output_path+'wind.png')
-    canvas.drawImage(g2, 250, 555,width=300, height=86.25)
-
+    canvas.drawString(30, 425, 'Wind parameters: ')
+    canvas.drawString(30, 405, 'Duration of the strongest wind event:')
+    canvas.drawString(210, 405,  str(round(dura/(60*60),2))+' h')
+    canvas.drawString(30, 385, 'Just considering homogeneous direction:')
+    canvas.drawString(30, 370,  str(round(dire/(60*60),2))+' h blowing '+str(round(m_dw_spi,0))+'° (c. nautica)')
+    canvas.drawString(30, 350, 'Reduction factor:')
+    canvas.drawString(120, 350, 'Duration factor:')
+    canvas.drawString(210, 350,  str(round(fdura,3)))
+    canvas.drawString(120, 335, 'Direction factor:')
+    canvas.drawString(210, 335,  str(round(fdire,3)))    
+    
     g2 =ImageReader(output_path+'structure.png')
     canvas.drawImage(g2, 250, 405,width=300, height=150)
 
+    canvas.drawString(30, 300, 'Mean friction velocity of the wind:')
+    canvas.drawString(190, 300,  "{:.2e}".format(round(m_wast,5))+' m/s')
+    canvas.drawString(30, 285, 'Min friction velocity of the wind:')
+    canvas.drawString(190, 285,  "{:.2e}".format(round(np.nanmin(wast),5))+' m/s')
+    canvas.drawString(30, 270, 'Max friction velocity of the wind:')
+    canvas.drawString(190, 270,  "{:.2e}".format(round(np.nanmax(wast),5))+' m/s')
 
-    canvas.drawString(280, 390, 'Wind parameters: ')
-    canvas.drawString(280, 370, 'Duration of the strongest wind event:')
-    canvas.drawString(460, 370,  str(round(dura/(60*60),2))+' h')
-    canvas.drawString(280, 350, 'Just considering homogeneous direction:')
-    canvas.drawString(280, 335,  str(round(dire/(60*60),2))+' h blowing '+str(round(m_dw_spi,0))+'° North')
-    canvas.drawString(280, 315, 'Reduction factor:')
-    canvas.drawString(380, 315, 'Duration factor:')
-    canvas.drawString(460, 315,  str(round(fdura,3)))
-    canvas.drawString(380, 300, 'Direction factor:')
-    canvas.drawString(460, 300,  str(round(fdire,3)))
-    canvas.drawString(280, 280, 'Mean friction velocity of the wind:')
-    canvas.drawString(440, 280,  "{:.2e}".format(round(m_wast,5))+' m/s')
-    canvas.drawString(280, 265, 'Min friction velocity of the wind:')
-    canvas.drawString(440, 265,  "{:.2e}".format(round(np.nanmin(wast),5))+' m/s')
-    canvas.drawString(280, 250, 'Max friction velocity of the wind:')
-    canvas.drawString(440, 250,  "{:.2e}".format(round(np.nanmax(wast),5))+' m/s')
+    canvas.drawString(30, 250, 'Time of wind events favoring BSIW (%)')
+    canvas.drawString(30, 230, 'Accoding to W')
+    canvas.drawString(150, 230,  str(round(100*(1-np.isnan(dw_spi).sum()/len(dx)),2))+ '%')
+    canvas.drawString(30, 215, 'Taking direction:')
+    canvas.drawString(150, 215,  str(round(100*(1-np.isnan(dw_hom).sum()/len(dx)),2))+ '%') 
 
+    g2 =ImageReader(output_path+'wind.png')
+    canvas.drawImage(g2, 250, 555,width=300, height=86.25)
+
+    g1 =ImageReader(output_path+'mean_temperature.png')
+    canvas.drawImage(g1, 250, 251,width=300, height=133.33)
 
     g3 =ImageReader(output_path+'temporal_analysis.png')
     canvas.drawImage(g3, 250, 127.5,width=300, height=112.5)
@@ -1606,20 +1620,18 @@ def main():
     canvas.drawString(30, 120, 'Averaged Richardson number:')
     canvas.drawString(180, 120, "{:.2e}".format(round(m_riw,0)))
 
-    canvas.drawString(30, 90, 'Daily averaged variables at thermocline depth:')
+    canvas.drawString(30, 90, 'Time averaged (thermocline assuming V1 mode) :')
     canvas.drawString(30, 70,  'Richardson number:')
-    canvas.drawString(140, 70,  "{:.2e}".format(round(np.nanmean(mod.average(riw,24/dt)),0))+' \xb1 '+"{:.2e}".format(round(np.std(mod.average(riw,24/dt))*1.96/np.sqrt(dt*lin/24),0))) # 1.96 = 95%
+    canvas.drawString(140, 70,  "{:.2e}".format(round(np.nanmean(mod.average(riw,mode1*0.25/2/dt)),0))+' \xb1 '+"{:.2e}".format(round(np.std(mod.average(riw,mode1*0.25/2/dt))*1.96/np.sqrt(dt*lin/(mode1*0.25/2)),0))) # 1.96 = 95%
 
     canvas.drawString(30, 55, 'Wedderburn number:')
-    canvas.drawString(140,55,  "{:.2e}".format(round(np.nanmean(mod.average(wedd,24/dt)),0))+' \xb1 '+"{:.2e}".format(round(np.std(mod.average(wedd,24/dt))*1.96/np.sqrt(dt*lin/24),0)))
+    canvas.drawString(140,55,  str(round(np.nanmean(mod.average(wedd,mode1*0.25/2/dt)),3))+' \xb1 '+"{:.2e}".format(round(np.std(mod.average(wedd,mode1*0.25/2/dt))*1.96/np.sqrt(dt*lin/(mode1*0.25/2)),3)))
 
-    canvas.drawString(280,90,'Daily averaged Filtered Richardson number:')
-    canvas.drawString(280,70,'Filtered by wind duration:')
-    canvas.drawString(440,70,  "{:.2e}".format(round(np.nanmean(mod.average(ridu,24/dt)),0)))
-    canvas.drawString(280,55,'Filtered by wind direction:')
-    canvas.drawString(440,55,  "{:.2e}".format(round(np.nanmean(mod.average(ridi,24/dt)),0)))
-
-
+    canvas.drawString(280,90,'Filtered time averaged Wedderburn number:')
+    canvas.drawString(280,70,'Filtered by lake mixing criteria:')
+    canvas.drawString(460,70, str(round(np.nanmin(mod.average(wedu,mode1*0.25/2/dt)),3)))
+    canvas.drawString(280,55,'Filtered by wind homogeneity:')
+    canvas.drawString(460,55, str(round(np.nanmin(mod.average(wedi,mode1*0.25/2/dt)),3)))
 
 
     canvas.showPage()
@@ -1641,20 +1653,21 @@ def main():
     g7 =ImageReader(output_path+'classification_evolution.png')
     canvas.drawImage(g7, 300, 580,width=280, height=210)
 
+    if int(0.5*(dura/(60*60)/dt)) == 0:
+        war.average(dig)
 
-
-    ri_wind = np.nanmin(mod.average(riw,dura/(60*60)/dt))
-    we_wind = np.nanmin(mod.average(wedd,dura/(60*60)/dt))
-    
+ 
     canvas.drawString(340,550,'Stability associated to strongest wind event:')
     canvas.drawString(340,530,  'Richardson number:')
-    canvas.drawString(460,530,  "{:.2e}".format(ri_wind))
+    canvas.drawString(460,530,  str(round(np.nanmin(ri_wind),3)))
 
     canvas.drawString(340,515, 'Wedderburn number:')
-    canvas.drawString(460,515,  "{:.2e}".format(we_wind))
+    canvas.drawString(460,515,  str(round(np.nanmin(we_wind),3)))
     
-    ampli_spigel = mod.spigel(m_he,average_wedda) 
-    ampli_bueno  = mod.bueno(m_he,m_hh,average_wedda)
+    
+    
+    ampli_spigel = mod.spigel(m_he,m_he+m_hh,average_wedda,we_wind) 
+    ampli_bueno  = mod.bueno(m_he,m_hh,average_wedda,we_wind,'amplitude')
     
     canvas.drawString(340,490,'BSIW amplitude according theories:')
     canvas.drawString(340,470,'Spigel and Imberger (1980):')
@@ -1663,7 +1676,8 @@ def main():
     canvas.drawString(340,455,'Bueno et al. (2020):')
     canvas.drawString(480,455, str(round(ampli_bueno,2))+' m')
     
-    
+    canvas.drawString(340,435,'Surface seiche amplitude:')
+    canvas.drawString(480,435, str(round(1000*ampli_spigel*m_glin/9.81,2))+' mm')
 
     canvas.drawString(340,410,'Generation & Degeneration Theory¹:')
 
@@ -1818,51 +1832,51 @@ def main():
     canvas.drawString(100, 370, 'Hydrostatic Model for the first three vertical and horizontal modes:')
 
     canvas.drawString(50, 350, 'V1H1' )
-    canvas.drawString(90, 350,  str(round(pxv1h1[1]/(60*60),2))+' h')
+    canvas.drawString(90, 350,  str(round(pv1h1[1]/(60*60),2))+' h')
     canvas.drawString(140, 350, ' \xb1 ')
-    canvas.drawString(160, 350, str(round((pxv1h1[1]-pxv1h1[0])/(60*60),2))+' h')
+    canvas.drawString(160, 350, str(round((pv1h1[1]-pv1h1[0])/(60*60),2))+' h')
 
     canvas.drawString(50, 335, 'V2H1' )
-    canvas.drawString(90, 335,  str(round(pxv2h1[1]/(60*60),2))+' h')
+    canvas.drawString(90, 335,  str(round(pv2h1[1]/(60*60),2))+' h')
     canvas.drawString(140, 335, ' \xb1 ')
-    canvas.drawString(160, 335, str(round((pxv2h1[1]-pxv2h1[0])/(60*60),2))+' h')
+    canvas.drawString(160, 335, str(round((pv2h1[1]-pv2h1[0])/(60*60),2))+' h')
 
     canvas.drawString(50, 320, 'V3H1' )
-    canvas.drawString(90, 320,  str(round(pxv3h1[1]/(60*60),2))+' h')
+    canvas.drawString(90, 320,  str(round(pv3h1[1]/(60*60),2))+' h')
     canvas.drawString(140, 320, ' \xb1 ')
-    canvas.drawString(160, 320, str(round((pxv3h1[1]-pxv3h1[0])/(60*60),2))+' h')
+    canvas.drawString(160, 320, str(round((pv3h1[1]-pv3h1[0])/(60*60),2))+' h')
 
 
     canvas.drawString(220, 350, 'V1H2' )
-    canvas.drawString(260, 350,  str(round(pxv1h2[1]/(60*60),2))+' h')
+    canvas.drawString(260, 350,  str(round(pv1h2[1]/(60*60),2))+' h')
     canvas.drawString(310, 350, ' \xb1 ')
-    canvas.drawString(330, 350, str(round((pxv1h2[1]-pxv1h2[0])/(60*60),2))+' h')
+    canvas.drawString(330, 350, str(round((pv1h2[1]-pv1h2[0])/(60*60),2))+' h')
 
     canvas.drawString(220, 335, 'V2H2' )
-    canvas.drawString(260, 335,  str(round(pxv2h2[1]/(60*60),2))+' h')
+    canvas.drawString(260, 335,  str(round(pv2h2[1]/(60*60),2))+' h')
     canvas.drawString(310, 335, ' \xb1 ')
-    canvas.drawString(330, 335, str(round((pxv2h2[1]-pxv2h2[0])/(60*60),2))+' h')
+    canvas.drawString(330, 335, str(round((pv2h2[1]-pv2h2[0])/(60*60),2))+' h')
 
     canvas.drawString(220, 320, 'V3H2' )
-    canvas.drawString(260, 320,  str(round(pxv3h2[1]/(60*60),2))+' h')
+    canvas.drawString(260, 320,  str(round(pv3h2[1]/(60*60),2))+' h')
     canvas.drawString(310, 320, ' \xb1 ')
-    canvas.drawString(330, 320, str(round((pxv3h2[1]-pxv3h2[0])/(60*60),2))+' h')
+    canvas.drawString(330, 320, str(round((pv3h2[1]-pv3h2[0])/(60*60),2))+' h')
 
 
     canvas.drawString(390, 350, 'V1H3' )
-    canvas.drawString(430, 350,  str(round(pxv1h3[1]/(60*60),2))+' h')
+    canvas.drawString(430, 350,  str(round(pv1h3[1]/(60*60),2))+' h')
     canvas.drawString(470, 350, ' \xb1 ')
-    canvas.drawString(490, 350, str(round((pxv1h3[1]-pxv1h3[0])/(60*60),2))+' h')
+    canvas.drawString(490, 350, str(round((pv1h3[1]-pv1h3[0])/(60*60),2))+' h')
 
     canvas.drawString(390, 335, 'V2H3' )
-    canvas.drawString(430, 335,  str(round(pxv2h3[1]/(60*60),2))+' h')
+    canvas.drawString(430, 335,  str(round(pv2h3[1]/(60*60),2))+' h')
     canvas.drawString(470, 335, ' \xb1 ')
-    canvas.drawString(490, 335, str(round((pxv2h3[1]-pxv2h3[0])/(60*60),2))+' h')
+    canvas.drawString(490, 335, str(round((pv2h3[1]-pv2h3[0])/(60*60),2))+' h')
 
     canvas.drawString(390, 320, 'V3H3' )
-    canvas.drawString(430, 320,  str(round(pxv3h3[1]/(60*60),2))+' h')
+    canvas.drawString(430, 320,  str(round(pv3h3[1]/(60*60),2))+' h')
     canvas.drawString(470, 320, ' \xb1 ')
-    canvas.drawString(490, 320, str(round((pxv3h3[1]-pxv3h3[0])/(60*60),2))+' h')
+    canvas.drawString(490, 320, str(round((pv3h3[1]-pv3h3[0])/(60*60),2))+' h')
 
 
 
@@ -1882,11 +1896,11 @@ def main():
 
     canvas.drawString(520,800,'Page 4/4')
 
-    g1 =ImageReader(output_path+'psd_multiplayer.png')
+    g1 =ImageReader(output_path+'psd_multi.png')
     canvas.drawImage(g1, 20, 540,width=320, height=240)
 
     g1 =ImageReader(output_path+'meteo_spectra.png')
-    canvas.drawImage(g1, 320, 492,width=240, height=288)
+    canvas.drawImage(g1, 320, 492,width=240, height=200)
 
     g1 =ImageReader(output_path+'temperature_depth.png')
     canvas.drawImage(g1, 20, 380,width=320, height=160)
@@ -1895,13 +1909,13 @@ def main():
         canvas.drawString(40, 360, 'Isotherm analysis:')
         
         g1 =ImageReader(output_path+'isotherms.png')
-        canvas.drawImage(g1, 10, 220,width=280, height=140)
+        canvas.drawImage(g1, 10, 200,width=280, height=140)
   
         g1 =ImageReader(output_path+'iso_bandpass.png')
-        canvas.drawImage(g1, 10, 80,width=280, height=140)
+        canvas.drawImage(g1, 10, 50,width=280, height=140)
 
         g1 =ImageReader(output_path+'psd_hydro_coriois.png')
-        canvas.drawImage(g1, 270, 80,width=300, height=225)      
+        canvas.drawImage(g1, 270, 50,width=300, height=225)      
 
   
     canvas.showPage()
@@ -1937,7 +1951,7 @@ def main():
     root.update()
     print ("> For additional information:")
     root.update()
-    print ("> https://sites.google.com/view/rafaelbueno/interwave-analyzer")
+    print ("> www.bit.ly/interwave_analyzer")
     root.update()
     print ("> ")
     root.update()
