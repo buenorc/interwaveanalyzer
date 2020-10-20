@@ -5,7 +5,7 @@ The Interwave Analyzer is an open-software designed to investigate the occurrenc
 ### Atual version: 1.00.3
 
 ### scientific paper (published with 1.00.3 version):
-de Carvalho Bueno, Bleninger, and Lorke. **Internal wave analyzer for thermally stratified lakes**. *Environmental Modelling and Software*, 2020.
+de Carvalho Bueno, Bleninger, and Lorke. **Internal wave analyzer for thermally stratified lakes**. Subimitted to *Environmental Modelling and Software*.
 
 GuiHub (scientific paper repository): https://github.com/buenorc/espaper.git
 
