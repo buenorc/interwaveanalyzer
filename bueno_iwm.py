@@ -284,9 +284,6 @@ def main():
     hzmid = np.zeros((lin,qt-1),float)  # z depth at middle point (m from the ref. level)
 
 # wind parametrization
-    sdur  = np.zeros((lin),float) # wind stress with duration filter
-    sdir  = np.zeros((lin),float) # wind stress with duration and direction
-
     dw_hom  = np.zeros((lin),float)
     dw_lit = np.zeros((lin),float)  # W according to literature criteria 
     dw_spi  = np.zeros((lin),float) # W according to Spigel et al.
@@ -328,7 +325,7 @@ def main():
     consecutive_dire, consecutive_wind, ver_dire, ver_wind = 0,0,0,0
     auxisa, auxisb, auxisc, auxisd = None, None, None, None
     war3,warmode1, warmode2 = 0,0,0
-    error_thermo = 0
+    error_thermo, error_3layer = 0, 0
 
     for t in range(lin):
    
@@ -473,7 +470,10 @@ def main():
             dw_spi[t] = None
         
     # 3layer structure    
-        h1[t],h2[t],h3[t],p1[t],p2[t],p3[t] = mod.structure3layer(qt, auxh, auxtem, minval, auxean, z0)
+        h1[t],h2[t],h3[t],p1[t],p2[t],p3[t],er3 = mod.structure3layer(qt, auxh, auxtem, minval, auxean, z0)
+        error_3layer = er3 + error_3layer 
+
+        
         
         if h1[t] == -999:            
             war3  = war3 + 1 
@@ -506,7 +506,9 @@ def main():
             v1mode[t] = v1mode[t-1]
             warmode1 = warmode1 + 1
 
+    if error_3layer >0: war.three_layer(dig,100*error_3layer/lin)
     if warmode1 > 0: war.profile_structure(dig,1,100*warmode1/lin)
+
     if warmode2 > 0: war.profile_structure(dig,2,100*warmode1/lin)
 
     if war3 > 0: war.metalimnion(dig,100*war3/lin)
@@ -577,24 +579,29 @@ def main():
 
     dura = ver_wind*dt*60*60   # duration of consecutive wind events (seconds)
     dire = ver_dire*dt*60*60   # duration of wind events considering homogeneous 
-                           # wind events (seconds)
 
     fdura = min([1,np.sqrt(4*dura/tbsiw)])   # parametrization (wind duration)
-    fdire = min([1,np.sqrt(4*dire/tbsiw)])   # parametrization (wind direc + dura)
+    if(fdura == 0): fdura = 1
 
 # loop in time to define the new richardson based on wind event 
-    for t in range(lin):
-    
-        sdur[t]  = (fdura**2)*strs[t]
-        sdir[t]  = (fdire**2)*strs[t]    
-
-        if(fdura == 0):
-            fdura = 1
-        if(fdire == 0):
-            fdire = 1
-
-        wedu[t] = wedd[t]/fdura
-        wedi[t] = wedd[t]/fdire
+    fdire = []
+    twind = dt*3600
+    for t in range(lin):  
+        
+        if dw_hom[t] == 357:
+            fdire.append(min([1,4*twind/v1mode[i]]))
+            twind = twind + dt*3600
+        else:
+            fdire.append(1)
+            twind = dt*3600
+                
+        try:
+            wedu[t] = wedd[t]/fdura
+        except:
+            wedu[t] = wedd[t]
+        
+        wedi[t] = wedd[t]/fdire[t]
+        
     
 #
 # averaged water density and layer thickness for higher vertical modes
@@ -656,11 +663,11 @@ def main():
     delta_variation = np.linspace(delta,delta+minval,15)
     
     for i in delta_variation:
-        hus,hms,hbs,pus,pms,pbs = mod.structure3layer(qt, mean_h, mean_temp, i, np.mean(ean), z0)
+        hus,hms,hbs,pus,pms,pbs,_ = mod.structure3layer(qt, mean_h, mean_temp, i, np.mean(ean), z0)
         
         try:
             _,sens,_  =miw.disp_xmodel3(pus,pms,pbs,hus,hms,hbs,ls_fetch,2,1)
-            sens_met.append(sens)
+            sens_met.append(sens/3600)
         except:
             sens_met.append(None)
     
@@ -1030,25 +1037,29 @@ def main():
     if turn_iso == 1:
         for i in range(4):
             if(tau[i]!=-999):
-                np.savetxt(output_path+'textfiles/spectral_isotherms'+str(tau[i])+'.txt', np.column_stack((freq[i],welch[i])), delimiter='\t', header='freq(Hz)\tPSD(oC²/Hz)', fmt='%0.8f %0.15f')                
-                np.savetxt(output_path+'textfiles/isotherms'+str(tau[i])+'.txt',np.column_stack((time_temp[i],iso[i])), delimiter='\t', header='time(hour)\tisotherm(oC)', fmt='%0.8f %0.5f')
-                np.savetxt(output_path+'textfiles/rednoise_isotherms'+str(tau[i])+'.txt', np.column_stack((wr[i],conf[i])), delimiter='\t', header='freq(Hz)\tPSD(oC²/Hz)', fmt='%0.8f %0.15f')
+                np.savetxt(output_path+'textfiles/spectral_isotherms'+str(tau[i])+'.txt', np.column_stack((freq[i],welch[i])), delimiter='\t', header='freq(Hz)\tPSD(oC²/Hz)', fmt='%0.8f %0.15f',comments='')                
+                np.savetxt(output_path+'textfiles/isotherms'+str(tau[i])+'.txt',np.column_stack((time_temp[i],iso[i])), delimiter='\t', header='time(hour)\tisotherm(oC)', fmt='%0.8f %0.5f',comments='')
+                np.savetxt(output_path+'textfiles/rednoise_isotherms'+str(tau[i])+'.txt', np.column_stack((wr[i],conf[i])), delimiter='\t', header='freq(Hz)\tPSD(oC²/Hz)', fmt='%0.8f %0.15f',comments='')
                 
     if turn_temp == 1:
         for i in range(4):
             if(sen[i]==1):
-                np.savetxt(output_path+'textfiles/spectral_sensor'+str(seu[i])+'.txt',np.column_stack((freqe[seu[i]],welch_sensor[seu[i]])), delimiter='\t', header='freq(Hz)\tPSD(m²/Hz)', fmt='%0.8f %0.15f')
-               
-    np.savetxt(output_path+'textfiles/wind.txt',np.column_stack((time_win,dw,iw,strs)), delimiter='\t', header='time(hour)\tdirection(o)\tspeed(m/s)\tstress(N/m²)', fmt='%0.8f %0.1f %0.3f %0.6f')
-    np.savetxt(output_path+'textfiles/spectral_wind.txt',np.column_stack((wl_aper_win,welch_win)), delimiter='\t', header='period(hour)\tPSD wind((m/s)²/Hz)', fmt='%0.3f %0.5f')
-    np.savetxt(output_path+'textfiles/stability.txt',np.column_stack((time_win,riw,wedd)), delimiter='\t', header='time(hour)\t Ri(-)\tWedderburn(-)', fmt='%0.3f %0.8f %0.8f')
-    np.savetxt(output_path+'textfiles/thermocline.txt',np.column_stack((time_win,he)), delimiter='\t', header='time(hour)\tthermocline depth(m)', fmt='%0.3f %0.4f')
-    np.savetxt(output_path+'textfiles/metalimnion_thickness.txt',np.column_stack((time_win,h2)), delimiter='\t', header='time(hour)\tmetalimnion thickness(m)', fmt='%0.3f %0.4f')
-    np.savetxt(output_path+'textfiles/internal_periods.txt',np.column_stack((time_win,v1mode, v2mode)), delimiter='\t', header='time(hour)\tV1H1 period(s)\tV2H1 period(s)', fmt='%0.3f %0.4f %0.4f')
-    np.savetxt(output_path+'textfiles/mean_profile.txt',np.column_stack((mean_h,mean_temp)), delimiter='\t', header='mab\ttemperature (dC)', fmt='%0.3f %0.4f')
+                np.savetxt(output_path+'textfiles/spectral_sensor'+str(seu[i])+'.txt',np.column_stack((freqe[seu[i]],welch_sensor[seu[i]])), delimiter='\t', header='freq(Hz)\tPSD(m²/Hz)', fmt='%0.8f %0.15f',comments='')
+    
+
+    np.savetxt(output_path+'textfiles/richardson.txt',np.column_stack((time_win,riwl)), header='000000\t'+'\t'.join(map(str,hlm)), delimiter='\t',comments='')
+    np.savetxt(output_path+'textfiles/wind.txt',np.column_stack((time_win,dw,iw,strs)), delimiter='\t', header='time(hour)\tdirection(o)\tspeed(m/s)\tstress(N/m²)', fmt='%0.8f %0.1f %0.3f %0.6f',comments='')
+    np.savetxt(output_path+'textfiles/watercond_mode1.txt',np.column_stack((time_win,pe,ph,he,hh)), delimiter='\t', header='time(hour)\tupper density (kg/m³)\tlower density (kg/m³)\tupper thickness (m)\tlower thickness (m)', fmt='%0.8f %0.6f %0.6f %0.2f %0.2f',comments='')
+    np.savetxt(output_path+'textfiles/spectral_wind.txt',np.column_stack((wl_aper_win,welch_win)), delimiter='\t', header='period(hour)\tPSD wind((m/s)²/Hz)', fmt='%0.3f %0.5f',comments='')
+    np.savetxt(output_path+'textfiles/stability.txt',np.column_stack((time_win,riw,wedd,iw_dw,iw_up,wedi)), delimiter='\t', header='time(hour)\t Ri(-)\tW (-)\tWmin (-)\tWmax (-)\tWfilt', fmt='%0.3f %0.8f %0.8f %0.8f %0.8f %0.8f',comments='')
+    np.savetxt(output_path+'textfiles/thermocline.txt',np.column_stack((time_win,he)), delimiter='\t', header='time(hour)\tupper layer thickness(m)', fmt='%0.3f %0.4f',comments='')
+    np.savetxt(output_path+'textfiles/metalimnion_thickness.txt',np.column_stack((time_win,h2)), delimiter='\t', header='time(hour)\tmetalimnion thickness(m)', fmt='%0.3f %0.4f',comments='')
+    np.savetxt(output_path+'textfiles/internal_periods.txt',np.column_stack((time_win,v1mode, v2mode)), delimiter='\t', header='time(hour)\tV1H1 period(s)\tV2H1 period(s)', fmt='%0.3f %0.4f %0.4f',comments='')
+    np.savetxt(output_path+'textfiles/mean_profile.txt',np.column_stack((mean_h,mean_temp)), delimiter='\t', header='mab\ttemperature (dC)', fmt='%0.3f %0.4f',comments='')
+    np.savetxt(output_path+'textfiles/wd_event.txt',np.column_stack((time_win,dw_lit,dw_spi,dw_hom,fdire)), delimiter='\t', header='time(hour)\tliterature(o)\tSpigel(o)\thomogeneous(-)\tfhomog(-)', fmt='%0.3f %0.2f %0.2f %0.2f %0.5f',comments='')
     
     if rad == 1:
-        np.savetxt(output_path+'textfiles/spectral_solar.txt',np.column_stack((wl_aper_sol,welch_sol)), delimiter='\t', header='period(hour)\tPSD sw((W/m²)²/Hz)', fmt='%0.3f %0.5f')
+        np.savetxt(output_path+'textfiles/spectral_solar.txt',np.column_stack((wl_aper_sol,welch_sol)), delimiter='\t', header='period(hour)\tPSD sw((W/m²)²/Hz)', fmt='%0.3f %0.5f',comments='')
 
 # -----------------------------------------------------------------------------    
     print ("> Part VI       Plotting graphs and making reports... ")
@@ -1231,7 +1242,7 @@ def main():
     ax2.set_title('(b)',loc='left')
     
     mode1 = pv1h1[1]/3600/2
-    average_wedda   = np.nanmin(mod.average(wedi,mode1*0.25/2/dt))
+    average_wedda   = np.nanmin(mod.average(wedd,mode1*0.25/2/dt))
     parh  = m_he/(m_he+m_hh) 
     
 
@@ -1585,7 +1596,7 @@ def main():
     canvas.drawString(120, 350, 'Duration factor:')
     canvas.drawString(210, 350,  str(round(fdura,3)))
     canvas.drawString(120, 335, 'Direction factor:')
-    canvas.drawString(210, 335,  str(round(fdire,3)))    
+    canvas.drawString(210, 335,  str(round(np.nanmean(fdire),3)))    
     
     g2 =ImageReader(output_path+'structure.png')
     canvas.drawImage(g2, 250, 405,width=300, height=150)

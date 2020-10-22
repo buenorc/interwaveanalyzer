@@ -1303,7 +1303,7 @@ def sensibility_metalimnion(delta,period,m,ax):
 #   Plot Function: Sensibility analysis for layer thickness variation 
 #   Graph to plot the BSIW period variation based on metalimnion thrshold (V2 mode) 
 #  
-    period = np.array(period)/3600
+
     ax.plot(delta, period, linewidth=1, c='black', ls='-')      
     
     ax.grid(True,which="both",color='black',ls=":",lw=0.25)

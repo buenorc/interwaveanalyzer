@@ -25,6 +25,11 @@ def isotherm_boundary(dig, tau):
     dig.write('> Please, spicify a new isotherm that is within the system \n')
     dig.write('> at least during part of the analyzed period\n\n\n') 
     
+def three_layer(dig,threrror):
+    dig.write('> Warning: Metalimnion borders have not been computed efficiently '+str(int(threrror))+'% of the total analyzed period \n')
+    dig.write('> In this case metalimnion thickness is assumed to have a 1/3 thickness of the total water depth \n\n\n')         
+  
+    
 def profile_structure(dig,mode,estimated):
     
     if mode == 1: 

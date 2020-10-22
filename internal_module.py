@@ -227,7 +227,7 @@ def thermocline_depth (qt,h,tau):
     return thermo, rho, error
 
 
-def metathick (qt,h,tau,minval):
+def metathick (qt,h,tau,minval,z0):
 #
 #   External Function: Thermal Stratification Analysis
 #   Function to define the metalimnion boundaries (metalimnion thickness)
@@ -243,47 +243,50 @@ def metathick (qt,h,tau,minval):
     
     # 1.1) metalimnion-epilimnion interface:   
     
-    z = zt     
+    z = zt   
                            
-    dmin = deriva(rho[z+1],rho[z],h[z+1],h[z])
+    dmin = (rho[z+1] - rho[z])/(h[z] - h[z+1])
     
     while (dmin > minval) and (z > 0):                                            
         z=z-1
-        dmin = deriva(rho[z+1],rho[z],h[z+1],h[z])
+        dmin = (rho[z+1] - rho[z])/(h[z] - h[z+1])
 
-    try:
-        aux1 = abs(np.mean([h[z+1],h[z]])) - abs(np.mean([h[z+2],h[z+1]]))
-        aux2 = deriva(rho[z+1],rho[z],h[z+1],h[z])-deriva(rho[z+2],rho[z+1],h[z+2],h[z+1])
-    except IndexError:
-        aux1 = 1
-        aux2 = 1
-    
+    aux1 =  (h[z]-h[z+2])/2  # now it is negative as is defined in the paper, but i am not sure !!!
+    rhodown = (rho[z+1]-rho[z])/(h[z] - h[z+1])
+    rhoup   = (rho[z+2]-rho[z+1])/(h[z+1] - h[z+2])
+        
+    aux2 = rhodown - rhoup
+  
     if(aux2 == 0.0):
-        ze = abs(np.mean([h[z+1],h[z]]))
-    
+        ze = (h[z]+h[z+1])/2 
     else:
-        ze   = abs(np.mean([h[z+1],h[z]])) + (minval - dmin)*aux1/aux2
+        ze   = (h[z]+h[z+1])/2 + (minval - dmin)*aux1/aux2
+ 
     
     # 1.2) metalimnion-hypolimnion interface:
     
     z = zt                                  
-    dmin = deriva(rho[z+1],rho[z],h[z+1],h[z])                                        
+    dmin =  (rho[z+1] - rho[z])/(h[z] - h[z+1])                                     
     
     while (dmin > minval) and (z < qt-2):    
         z=z+1                                                                     
-        dmin = deriva(rho[z+1],rho[z],h[z+1],h[z])                                    
+        dmin =  (rho[z+1] - rho[z])/(h[z] - h[z+1])                                   
 
       
-    aux1 = abs(np.mean([h[z+1],h[z]])) - abs(np.mean([h[z],h[z-1]])) 
-    aux2 = deriva(rho[z+1],rho[z],h[z+1],h[z])-deriva(rho[z],rho[z-1],h[z],h[z-1])
+    aux1 = (h[z-1]-h[z+1])/2 
+    rhodown = (rho[z+1]-rho[z])/(h[z]-h[z+1])
+    rhoup   = (rho[z]-rho[z-1])/(h[z-1]-h[z])
+    
+    aux2 = rhodown - rhoup
     
     if (aux2 == 0.0):
-        zh = abs(np.mean([h[z+1],h[z]]))                                                 
+        zh = (h[z]+h[z-1])/2                                                
     else:
-        zh   = abs(np.mean([h[z+1],h[z]])) + (minval - dmin)*aux1/aux2                 
-    
+        zh   = (h[z]+h[z-1])/2 + (minval - dmin)*aux1/aux2                 
+        
+    ze, zh, error = consistency(ze,zh,h,z0)
   
-    return ze,zh
+    return ze,zh,error
     
 
 def thermal_stability(qt,h,H,tau):
@@ -371,7 +374,7 @@ def density_3layer (qt,h,tau,minval,H,z0):
 #   h#      output      layer thickness (layer #)
 #   p#      output      water density (layer #)
     
-    ze, zh = metathick (qt,h,tau,minval)   
+    ze, zh, error = metathick (qt,h,tau,minval,z0)  
     
     try:
         
@@ -421,7 +424,7 @@ def density_3layer (qt,h,tau,minval,H,z0):
             p2 = np.nanmean(rho[int(qt/2)])
             p3 = np.nanmean(rho[-1])
             
-    return h1,h2,h3,p1,p2,p3
+    return h1,h2,h3,p1,p2,p3,error
 
 def thickness_decomposition(psi,zph, rhoph):
 #
@@ -472,9 +475,9 @@ def structure3layer(qt, h, tau, minval, H, z0):
 #   External Function: Thermal Stratification Analysis   
 #   Function to compute the thermal structure of a three-layer system
 #    
-    h1,h2,h3,p1,p2,p3 = density_3layer(qt, h, tau, minval, H, z0)
+    h1,h2,h3,p1,p2,p3,error = density_3layer(qt, h, tau, minval, H, z0)
 
-    return h1,h2,h3,p1,p2,p3
+    return h1,h2,h3,p1,p2,p3, error
 
 def approx_layer(he,hh,pe,ph): 
 #
@@ -509,6 +512,29 @@ def wedderburn(glin,he,wast,ls):
         
     return wedd   
 
+
+def consistency(ze,zh,h,z0):
+#   
+#   External Function: Statistical Analysis        
+#   Function to consiste the metalimnion thickness
+#        
+    error = 0
+    
+    if np.nanmax(h) < abs(ze) or abs(ze) < np.nanmin(h) or ze < zh:
+
+        ze = (max(h)+zh)/2
+        error = 1
+        
+        if np.nanmax(h) < abs(zh) or abs(zh) < np.nanmin(h) or ze < zh:
+            ze = z0 + 2*(max(h)-z0)/3
+            zh = z0 + 1*(max(h)-z0)/3
+
+    else:    
+        if np.nanmax(h) < abs(zh) or abs(zh) < np.nanmin(h):
+            zh = (ze+z0)/2
+            error = 1
+            
+    return ze, zh, error
 
 def chi2inv(p, nfft, nperseg, test=None):
 #   
@@ -667,6 +693,7 @@ def average(arr,n):
     else:
         end = n*int(len(arr)/n)       
         return np.nanmean(arr[:end].reshape(-1,n),1)
+
 
 def ci(x):
 # 
