@@ -247,42 +247,47 @@ def metathick (qt,h,tau,minval,z0):
                            
     dmin = (rho[z+1] - rho[z])/(h[z] - h[z+1])
     
-    while (dmin > minval) and (z > 0):                                            
-        z=z-1
-        dmin = (rho[z+1] - rho[z])/(h[z] - h[z+1])
+    try:
+        while (dmin > minval) and (z > 0) and (z < qt-2):                                            
+            z=z-1
+            dmin = (rho[z+1] - rho[z])/(h[z] - h[z+1])
 
-    aux1 =  (h[z]-h[z+2])/2  # now it is negative as is defined in the paper, but i am not sure !!!
-    rhodown = (rho[z+1]-rho[z])/(h[z] - h[z+1])
-    rhoup   = (rho[z+2]-rho[z+1])/(h[z+1] - h[z+2])
+        aux1 =  (h[z]-h[z+2])/2  # now this term is negative as is defined in the paper, but i am not sure !!! (changed to positive)
+        rhodown = (rho[z+1]-rho[z])/(h[z] - h[z+1])
+        rhoup   = (rho[z+2]-rho[z+1])/(h[z+1] - h[z+2])
         
-    aux2 = rhodown - rhoup
+        aux2 = rhodown - rhoup
   
-    if(aux2 == 0.0):
-        ze = (h[z]+h[z+1])/2 
-    else:
-        ze   = (h[z]+h[z+1])/2 + (minval - dmin)*aux1/aux2
+        if(aux2 == 0.0):
+            ze = (h[z]+h[z+1])/2 
+        else:
+            ze   = (h[z]+h[z+1])/2 + (minval - dmin)*aux1/aux2
  
-    
+    except:
+        ze = (h[z]+h[z+1])/2
     # 1.2) metalimnion-hypolimnion interface:
     
     z = zt                                  
     dmin =  (rho[z+1] - rho[z])/(h[z] - h[z+1])                                     
     
-    while (dmin > minval) and (z < qt-2):    
-        z=z+1                                                                     
-        dmin =  (rho[z+1] - rho[z])/(h[z] - h[z+1])                                   
+    try:
+        while (dmin > minval) and (z < qt-2) and (z > 0):    
+            z=z+1                                                                     
+            dmin =  (rho[z+1] - rho[z])/(h[z] - h[z+1])                                   
 
       
-    aux1 = (h[z-1]-h[z+1])/2 
-    rhodown = (rho[z+1]-rho[z])/(h[z]-h[z+1])
-    rhoup   = (rho[z]-rho[z-1])/(h[z-1]-h[z])
+        aux1 = (h[z-1]-h[z+1])/2 
+        rhodown = (rho[z+1]-rho[z])/(h[z]-h[z+1])
+        rhoup   = (rho[z]-rho[z-1])/(h[z-1]-h[z])
     
-    aux2 = rhodown - rhoup
+        aux2 = rhodown - rhoup
     
-    if (aux2 == 0.0):
-        zh = (h[z]+h[z-1])/2                                                
-    else:
-        zh   = (h[z]+h[z-1])/2 + (minval - dmin)*aux1/aux2                 
+        if (aux2 == 0.0):
+            zh = (h[z]+h[z-1])/2                                                
+        else:
+            zh   = (h[z]+h[z-1])/2 + (minval - dmin)*aux1/aux2                 
+    except: 
+        zh = (h[z]+h[z-1])/2 
         
     ze, zh, error = consistency(ze,zh,h,z0)
   
