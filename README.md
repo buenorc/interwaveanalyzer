@@ -1,6 +1,7 @@
 ## Interwave Analyzer 
+### DOI: 10.5281/zenodo.4264575
 
-The Interwave Analyzer is an open-software designed to investigate the occurrence of basin-scale internal waves in stratified lakes, providing a set of tools to estimate some physical indices to analyze the probability of internal waves activity and lake mixing. The program provides classification of lake mixing, internal waves patterns, and degeneration of basin-scale internal wave based on well established theories of internal waves. The Interwave Analyzer provide an powerful, easily accessible, and an universal analysis of internal waves from instrumented buoy and meteorological data stations.
+The Interwave Analyzer is an open-software designed to investigate the occurrence of basin-scale internal waves in stratified lakes, providing a set of tools to estimate some physical indices to analyze the probability of internal waves activity and lake mixing. The program provides the classification of lake mixing, internal wave patterns, and degeneration of basin-scale internal waves based on well-established theories of internal waves. The Interwave Analyzer provides a powerful, easily accessible, and universal analysis of internal waves from instrumented buoy and meteorological data stations.
 
 ### Atual version: 1.00.3
 
