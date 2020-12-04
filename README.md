@@ -42,7 +42,7 @@ are installed and the anaconda version has Python 3.X. If you use another interp
 following packages are installed in the your python interpreter: Numpy 1.16.3, Datetime 4.0.1, Reportlab
 3.5.19, Scipy 1.2.1, Nitime 0.7, Matplotlib 3.1.0, and tk (tkinter) 8.6.8, or compatibles versions.
 
-5) After the installation, go to https://sites.google.com/view/rafaelbueno/interwave-analyzer and click on
+5) After the installation, go to https://sites.google.com/view/interwaveanalyzer/interwave-analyzer and click on
 Code repository, or access directly our repository in https://github.com/buenorc/interwaveanalyzer;
 6) Download all files .py available to download, including the raster-graphics file-format 0interwave.png
 which is the logo used by the Interwave Analyzer’s report and the icon interwave icon, which is used
@@ -52,4 +52,4 @@ as Interwave Analyzer icon on the GUI;
 9) We recommend you to download the example files available at Interwave Analyzer’s website on Download
 example. For a detailed tutorial using these files, see section 5.
 
-**Attention:** For more information (user manual, how to obtain the pre-compiled version, FAQ, team, etc), please visit: https://sites.google.com/view/rafaelbueno/interwave-analyzer
+**Attention:** For more information (user manual, how to obtain the pre-compiled version, FAQ, team, etc), please visit: https://sites.google.com/view/interwaveanalyzer/interwave-analyzer
