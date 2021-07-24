@@ -6,9 +6,9 @@ Interwave Analyzer Graphical User Interface function
 modififications to previosly versions must be specified here using WAVE codes:
     
 W-23.01-1.00.3-00
-A-01.01-1.00.3-00
-V-22.01-1.00.3-00
-E-05.01-1.00.3-00
+A-01.01-2.00.3-00
+V-22.01-2.00.3-00
+E-05.01-2.00.3-00
 """
 
 from tkinter import *
@@ -88,6 +88,15 @@ def open_button():
             else:
                 nextline = next(reader)
 
+            num = reader.readline().strip()
+            deco_dt.delete(0,'end')
+            if num == '-999':
+                decomp.set(0)
+                deco_dt.config(state='disable')
+            else:
+                decomp.set(1)
+                deco_dt.config(state='normal')
+                deco_dt.insert(END,float(num))
                
             win = reader.readline()
             for i in range(4):
@@ -251,6 +260,11 @@ def save_settings(temporary):
         else:
             data.write(str(-999)+'\n')
 
+        if int(decomp.get()) == 1:
+            data.write(str(deco_dt.get())+'\n')
+        else:
+            data.write(str(-999)+'\n')
+            
         data.write(str(windows_var.get())+'\n')
         data.write(str(mother_var.get())+'\n')
         data.write(str(isotherm_button.get())+'\n')
@@ -501,7 +515,15 @@ def window_destroy():
     answer = messagebox.askyesno("exit",'do you really want to exit ?')
     if answer:
         window.destroy()
-     
+
+def selected_decomp():
+    global decomp_type
+    decomp_type = int(decomp.get())
+    
+    if int(decomp.get()) == 0:
+        deco_dt.config(state='disable')
+    elif int(decomp.get()) ==1:
+        deco_dt.config(state='normal')
         
 window = Tk()
 
@@ -704,10 +726,20 @@ rad2 = Radiobutton(tab2,text='Defined manually (days): ', variable=winsizechoose
  
 winsizechoose.set(1)
 
-
 winsize = Entry(tab2, bd =3)
 winsize.grid(row=18,column=1)
 winsize.config(state='disable')
+
+Label(tab2,anchor="w",font="Verdana 8 bold", text="Decomposition model",width=50).grid(row=20,column=0,pady=8,sticky='w')
+
+decomp = IntVar()
+decomp1 = Checkbutton(tab2,text='Temporal resolution (min)', variable=decomp, onvalue=1, offvalue=0, command=selected_decomp)
+
+decomp1.grid(row=22,column=0,pady=2,padx=100,sticky='w') 
+
+deco_dt = Entry(tab2, bd =3)
+deco_dt.grid(row=22,column=1)
+deco_dt.config(state='disable')
 
 # ----------------------------- Isotherm Analsysis (tab3) ---------------------
 

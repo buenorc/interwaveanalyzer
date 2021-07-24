@@ -7,92 +7,171 @@ modififications to previosly versions must be specified here using WAVE codes:
     
 W-23.05-1.00.0-00
 A-01.05-1.00.3-00
-V-22.05-1.00.3-00
-E-05.05-1.00.3-00
+V-22.05-1.00.4-00
+E-05.05-1.00.4-00
 """
 
 import numpy as np
 import math as ma
 
-from internal_module import thickness_decomposition
+from internal_module import thermal_stability
 
 
 
-def decomposition(rho,z): 
-#
-#   Model Function: Mode decomposition (numerical modeling)    
-#     
-    nmodes = int(len(z)/2)
-    
-    if  int(len(z)/2) > 10:
-        nmodes = 10
-    
-    dz   = np.diff(z)
+def decomposition(L,tau,h, H):
 
-    hs   = z[:-1]+np.median(np.diff(z))/2    
+    N    = 100         # resolution of the refined grid
+
+    increment = 3600  # 3600 seconds = 60 minutes = 1 h 
+    k    = np.pi/(L)     # wave number
+
+
+    # depth classification
+    a = len(tau)
+
+    tau  = np.concatenate((tau,[-9999]))
+    h = np.concatenate((h,[H]))
+    H = h[-1]
+
+
+    refined_depth = np.linspace(0,H,N)
+    dz = refined_depth[1] - refined_depth[0]
+
+   
+    bv  = np.zeros((N),float)
+    nsq = np.zeros((N),float)
+
+    rho, buoy, hmid, glin = thermal_stability(a,h,H,tau)
+
+    buoy = np.concatenate((buoy,[np.nan]))
+    buoy = buoy*60  # = [1/min]
+
+    if h[0] < 50:                 # if the 1st sensor (near the water surface) is not deeper than 50 m  
     
-    n2    = np.zeros((len(hs)),float)
-    rhoph = np.zeros((len(hs)),float)
-    
-    for i in range(len(hs)-1):
+        for i in range(N):         # contour that represents a depth vector in meters (1 m to 100 m)
         
-        rhoph[i] = (rho[i]+rho[i+1])/2
-        n2[i]  = 9.81*(rho[i]-rho[i+1])/rho[i]/hs[i]
+            ii = 1                     # second index (ii) to evaluate
 
-    N2 = n2+(np.arange(len(hs)))*10**-9
-    N2 = np.flip(N2)    
-    
-    # First we are solving for w on dz,2dz,3dz...H-dz
-    M = np.shape(N2)[0]-1
-    N2mid = N2[:-1]+np.diff(N2)/2.
-    
-    # matrix for second difference operator
-    D = np.diag(-2.*np.ones(M),0)
-    D  += np.diag(1.*np.ones(M-1),-1)
-    D += np.diag(1.*np.ones(M-1),1)
-
-
-    for i in range(M):
-        for j in range(M):
-            D[i,j] = -D[i,j]/dz[i]/dz[i]
-    D = np.diag(1./N2mid).dot(D)
-    
- 
-    ce,W = np.linalg.eig(D)
-    
-    for i in range(M):
-        for j in range(M):
-            W[i,j] = W[i,j]/np.sqrt(dz[i])
-    ce = 1./np.sqrt(ce)
-    ind=np.argsort(-ce)
-    
-    ce=ce[ind[:-2]]
-    W=W[:,ind[:-2]]
-    
-    psi = np.zeros((M+1,M+1-3))
-    psi[0,:] = W[0,:]
-    psi[1:-1,] = np.diff(W,axis=0)
-    psi[-1,:] = -W[-1,:]
-    
-
-    A = np.zeros((M-2))
-
-    for i in range(M-2):
-        A[i] = np.sqrt(np.sum(psi[:,i]*psi[:,i],axis=0)*dz[i])
-    
-    psi = psi/A
-    
-    psi[:,psi[0,:]<0] *= -1
-    
-    zphi = np.zeros(M+1)
-    
-    for i in range(M+1):
-        zphi[i] = (z[i] + z[i+1])/2
+            while h[ii] < refined_depth[i] :   # 
+                ii = ii + 1
         
-    psi_req = np.flip(psi[:,:nmodes],0)
-    layer_depth, layer_rho = thickness_decomposition(psi_req,zphi, rhoph)
+            if buoy[ii-1] > -1:
+                bv[i] = buoy[ii-1]
+            else:
+                if h[ii-1] < 50:
+                    bv[i] = 0.3
+                else:
+                    bv[i] = 0.08
+        
+            nsq[i] = bv[i]**2/3600  # buoyancy frequency (N²) - 1/min² to 1/second²
+        
+    else:                              # there is not sensor near the surface (in the first 50 m)
 
-    return psi_req,zphi,rhoph, nmodes
+        for i in range(N):         # contour that represents a depth vector in meters (1 m to 100 m)
+            ii = 1                     # second index (ii) to evaluate
+            while h[ii] > refined_depth[i] :   # 
+                ii = ii + 1
+        
+            if buoy[ii-1] > -1:
+                bv[i] = buoy[ii-1]
+            else:
+                if h[ii-1] < 50:
+                    bv[i] = 0.3
+                else:
+                    bv[i] = 0.08
+        
+            nsq[i] = bv[i]**2/3600  # buoyancy frequency (N²) - 1/min² to 1/second²
+        
+    
+# calculate the first vertical modes w[m,:]
+# find the approximated value of p depending on the mode that is defined
+
+    W = np.ones((N),float)
+
+    W[0] = 0
+    W[1] = 1
+
+    finnew = 0
+    p      = 0 # internal seiche period
+
+
+    pnew      = p
+    peri      = []
+    conv      = []
+
+    w   = np.zeros((5,N),float)
+    n   = np.zeros((5,N),float)
+    hor = np.zeros((5,N-1),float) 
+
+    for m in range(5):
+        e=0.5
+        while e >= 0:
+            for i in range(2,N):
+                f = 2 - k**2*dz**2*(nsq[i-1]*(p**2)/(2*np.pi)**2 - 1 )
+                W[i] =  -W[i-2] + f * W[i-1]
+            
+            
+            finold = finnew
+            finnew = W[-1]
+        
+            e = finold*finnew
+            pold = pnew
+            pnew = p
+            p = p + increment
+
+        
+        if finnew > 0:
+            randoben  = pnew
+            randunten = pold
+        else:
+            randoben  = pold
+            randunten = pnew  
+    
+        finold = finnew
+    
+    # halfing of the intervalls
+    
+        while abs(randunten-randoben)>0.1:
+
+            p=0.5*(randunten+randoben)
+        
+            for i in range(2,N):
+                f = 2 - k**2*dz**2*(nsq[i-1]*(p**2)/(2*np.pi)**2 - 1 )
+                W[i] =  -W[i-2] + f * W[i-1]  
+        
+
+            finnew = W[-1] 
+        
+            if finnew < 0:
+                randunten = p
+            else:
+                randoben  = p
+    
+        normw=np.sqrt(sum((W*nsq)*np.transpose(W)))
+    
+        for i in range(N):
+            w[m,i] = W[i]/normw
+            n[m,i] = np.sqrt(nsq[i])*W[i]/normw
+        
+        for i in range(N-1):
+            hor[m,i] = w[m,i+1] - w[m,i]
+    
+        finnew = finold
+        
+        peri.append(p/3600)  # hour
+        p = p + increment
+
+        conv.append((nsq)*w[m,:])
+     
+    # hortief = np.zeros((a-1),float)
+    #
+    # for i in range(a-1):
+    #     hortief[i] = -1*h[i]
+    
+    vel = np.transpose(hor)
+    
+
+    return vel, conv, refined_depth, peri
 
 
 def disp_zmodel (pe,ph,he,hh,L,m):

@@ -7,11 +7,29 @@ Internalwave Analyzer warning modules (sense module)
 modififications to previosly versions must be specified here using WAVE codes:
     
 W-23.07-1.00.3-01
-A-01.07-1.00.3-01
-V-22.07-1.00.3-01
-E-05.07-1.00.3-01
+A-01.07-1.00.4-01
+V-22.07-1.00.4-01
+E-05.07-1.00.4-01
 
 """
+def decomp_default(dig,dt):
+    dig.write('> Warning: decomposition model has been applied for each time step \n')
+    dig.write('> dt='+str(round(int(dt)))+'min \n')
+    dig.write('> To run faster, please, increase the time step\n\n\n')
+
+def decomp_changed(dig,dt):
+    dig.write('> Warning: the temporal resolution of the decomposition model is higher than the temporal resolution of analysis \n')
+    dig.write('> The resolution of the decomposition model has been changed to the same of the resolution data \n')
+    dig.write('> dt='+str(round(int(dt)))+'min\n\n\n')
+    
+def decomp_multiple(dig,dt):
+    dig.write('> Warning: the temporal resolution of the decomposition model must be multiple of the temporal resolution of analysis \n')
+    dig.write('> The resolution of the decomposition model has been changed to the nearest multiple value\n')
+    dig.write('> dt='+str(round(int(dt)))+'min\n\n\n')        
+    
+def decomp_specified(dig,dt):
+    dig.write('> Warning: the temporal resolution of the decomposition was specified by the user \n')
+    dig.write('> the temporal resolution is for the decomposition model is specified to '+str(round(int(dt)))+'min \n\n\n')
 
 def coarse_fetch(dig):
     dig.write('> Warning: data from .fet is to coarse to identify the \n')

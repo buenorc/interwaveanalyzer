@@ -318,9 +318,9 @@ def thermal_stability(qt,h,H,tau):
         glin[z]     = 9.81*abs(rho[z+1] - rho[z])/rho[z+1]
 
         if(h[z] != h[z+1]):
-            n2d[z]    = math.sqrt(glin[z]/(h[z]-h[z+1]))
+            n2d[z]    = np.sqrt(glin[z]/abs(h[z]-h[z+1]))
         else:
-            n2d[z]    = math.sqrt(glin[z]/0.01)     # same depth
+            n2d[z]    = np.sqrt(glin[z]/0.01)     # same depth
     
     return rho, n2d, hmid, glin
     
@@ -553,19 +553,19 @@ def chi2inv(p, nfft, nperseg, test=None):
         nw2=(nfft/nperseg)
         return 2*sc.gammaincinv(nw2,p)/nw2  # Inverse incomplete gamma function
 
+def stad_deviation(data):
 
-def mean_confidence_interval(data, confidence=0.99):
-#   
-#   External Function: Statistical Analysis        
-#   Function to mean and confidence interval
-# 
+    m, lower, upper = [], [], []
+    for i in range(len(data[0,:])):
+        
+        m.append(np.mean(data[:,i],axis=0))
+        sd = ciout(data[:,i])
 
-    dof = len(data) -1 
-    mean, sigma = np.mean(data,axis=0), sem(data, axis=0)
-
-    h = t.interval(confidence, dof, mean, sigma)
-
-    return mean, h[0], h[1]
+        upper.append(m[i] + sd)
+        lower.append(m[i] - sd)
+        
+    return np.array(m), np.array(lower), np.array(upper)
+    
 
 def conflevel(Ax,npr,dt,rho,wr,nfft,nperseg):
 #   
@@ -682,7 +682,7 @@ def ciout(x):
 #   External Function: Statistical Analysis        
 #   confidence interval of x-data (assuming 95% confidence interval )   
 #
-    nivel = ci(x)[1]-np.mean(ci(x))
+    nivel = ci(x)[1]-np.nanmean(x)
     return nivel
 
 
@@ -716,6 +716,7 @@ def ci(x):
     try:   # If all x is not a number, NaN is returned as prediction bands
         upper = np.nanmean(x) + dev 
         lower = np.nanmean(x) - dev 
+        
     except RuntimeWarning:
         upper = None
         lower = None
@@ -1172,9 +1173,9 @@ def wave_spectral (si, dt, mother):
 #   Wavelet parameters:
 # 
     pad = 1         # pad the time series with zeroes (recommended)
-    dj = 0.10       # this will do 10 sub-octaves per octave
-    s0 = 2.*dt      # this provide a analysis at a scale of 8*dt time-scale
-    j1 = 15./dj     # this provides 15 powers-of-two with dj sub-octaves each
+    dj = 0.25       # this will do 10 sub-octaves per octave
+    s0 = 4.*dt      # this provide a analysis at a scale of 8*dt time-scale
+    j1 = 7./dj      # this provides 15 powers-of-two with dj sub-octaves each
 #
 #      
 

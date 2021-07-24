@@ -7,8 +7,8 @@ modififications to previosly versions must be specified here using WAVE codes:
     
 W-23.06-1.00.0-00
 A-01.06-1.00.3-00
-V-22.06-1.00.3-00
-E-05.06-1.00.3-00
+V-22.06-1.00.4-00
+E-05.06-1.00.4-00
 
 """
 
@@ -19,9 +19,26 @@ import matplotlib.ticker as ticker
 import matplotlib.patches as mpatches
 import internal_module as mod
 
-#from windrose import WindroseAxes
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
+
+import matplotlib.colors as colors
+
+class MidpointNormalize(colors.Normalize):
+#
+#   Auxiliary Function: Normalize velocity color
+#   Function to define the position of the velocity equal to zero    
+# 
+
+    def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
+        self.midpoint = midpoint
+        colors.Normalize.__init__(self, vmin, vmax, clip)
+
+    def __call__(self, value, clip=None):
+        # I'm ignoring masked values and all kinds of edge cases to make a
+        # simple example...
+        x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
+        return np.ma.masked_array(np.interp(value, x, y))
 
 
 def equation_sd (H, x, rhoe, rhoh, L, dh):
@@ -203,7 +220,45 @@ def model_plot(freq,col,maxi,ax,typ='log'):
         rec    = mpatches.Rectangle((freq[2],0.0), d, maxi, color=col,alpha=0.5)
         
     ax.add_patch(rec)
+    
+def modal_period(date, period_time, ax):
+#
+#   Auxiliar Plot: Function to plot the theoretical period for different modes
+#   Generates periods in hours based on main wind fetch
+# 
 
+    color = ['black','dimgray','navy','salmon','red',]
+
+    for i in range(5):
+        ax.plot(date, period_time[:,i], linewidth=1, c=color[i], ls='-', label = 'mode V'+str(i+1))
+           
+    ax.set_xticklabels(date, rotation=25)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+    
+    ax.set_xlim([date[0],date[-1]])
+    
+    ax.grid(True,which="both",color='black',ls=":",lw=0.25)
+    ax.legend(loc='upper right', prop={'size': 8})
+    
+    ax.set_ylabel('wave period (hours)')   
+
+    
+def velocity_mode(dx, vel, h, per, i, ax):
+#
+#   Auxiliar Plot: Function to plot the arbitrary velocity of each mode
+#   Generates arbitrary velocity based on solution of GW equation 
+# 
+    depth = -1*h[:-1]
+    
+    ax.set_title( 'mode V'+str(i+1)+'H1 - '+r'$\bar{T} =$'+str(round(per,2))+' hours',loc='left', fontsize= 9)
+    x = ax.contourf(dx, depth, vel.T, 100, extend='both', cmap='seismic', norm=MidpointNormalize(midpoint=0.)) 
+    
+    ax.set_ylabel('water depth (m)')
+    
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d'))
+    plt.colorbar(x, orientation='vertical', label='arbitrary velocity',aspect=40, ax=ax)
+       
+    
 def significance(sig,wo,c,ax,typ='xax'):
 #    
 #   Auxiliar Plot: Function to plot the confidence interval for PSD
@@ -696,9 +751,8 @@ def averaged_profile(temp,low,high,h,z0, ax):
     
     ax.scatter(temp, h, color='red', label='time averaged profile') 
 
-    ax.plot([low,high],[h,h],c='blue',lw=1)
-        
-    
+    ax.fill_betweenx(h, low, high, where=high >= low, facecolor='red', alpha=0.2, interpolate=True) 
+ 
     ax.plot(temp, h, linewidth=1, c='black', ls='-')      
     
     ax.grid(True,which="both",color='black',ls=":",lw=0.25)

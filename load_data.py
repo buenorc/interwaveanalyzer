@@ -34,7 +34,7 @@ def file_len(fname, col='off'):
 
 def serial_number (y,mo,d,h,m):
 #
-#   Internal Function: Serial number to define date
+#   Internal Function: Serial number to define date (min)
 #   Function to return a serial number
 #     
     return m + h*60 + d*24*60 + mo*30*24*60 + y*12*30*24*60

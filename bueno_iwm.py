@@ -7,8 +7,8 @@ modififications to previosly versions must be specified here using WAVE codes:
     
 W-23.02-1.00.3-00
 A-01.02-1.00.3-01
-V-22.02-1.00.3-01
-E-05.02-1.00.3-01
+V-22.02-1.00.4-01
+E-05.02-1.00.4-01
 """
 
 # -----------------------------------------------------------------------------
@@ -72,7 +72,7 @@ def main():
     root.update()
     print ("--------------------------------------------------------------------------------------")
     root.update()
-    print ("> Interwave Analyzer, version 1.00.2        July   2020")
+    print ("> Interwave Analyzer, version 1.00.3        September   2020")
     root.update()  
     print ("> ")
     root.update() 
@@ -127,8 +127,11 @@ def main():
 
         autoff_wsuser = int(reader.readline())
         windsizeuser  = float(reader.readline())
-        windsizeuser  = windsizeuser*24*60*60         
-              
+        windsizeuser  = windsizeuser*24*60*60    
+        
+        dt_decom = float(reader.readline())
+        dt_decom = dt_decom/60   # min to hours
+
         window = reader.readline()               
         mother = reader.readline()
         window = window.replace('\n','') 
@@ -198,7 +201,7 @@ def main():
     ean, h, tempa           = load.serial_cota(serialt,nac,lin,qt,temp,sen_nam,ean_serie,ean_cota,z0)
     wind, dw, ra            = load.serial_wind(serialt,win,rad,lin)
 
-
+            
     if type_length == 1: 
         angle, dists = None, len_basin 
         
@@ -226,6 +229,28 @@ def main():
     dig.write("-------------------------------------------------------------------------------------\n")
     dig.write("Interwave Analyzer diagnosis\n")
     dig.write("-------------------------------------------------------------------------------------\n\n")
+
+    if dt_decom == -999:
+        dt_decom = dt
+        war.decomp_default(dig,dt*60) 
+    else:
+        if dt_decom < dt:
+            dt_decom = dt 
+            war.decomp_changed(dig,dt*60) 
+        else:
+            if ((dt_decom*60)%(dt*60)==0):
+                war.decomp_specified(dig,dt_decom*60) 
+            else:
+                dt_decom = int(dt *60*round(float(dt_decom*60)/(dt*60)))
+                
+                if dt_decom >= dt:
+                    war.decomp_multiple(dig,dt_decom*60)
+                else:
+                    dt_decom = dt 
+                    war.decomp_changed(dig,dt*60)                     
+    
+    Ndeco = int(dt_decom/dt)
+
     
 # -----------------------------------------------------------------------------
 # DEFINING ARRAYS 
@@ -326,6 +351,9 @@ def main():
     auxisa, auxisb, auxisc, auxisd = None, None, None, None
     war3,warmode1, warmode2 = 0,0,0
     error_thermo, error_3layer = 0, 0
+    period_time, vel_time, cpzin, time_model, date_model = [], [], [], [], []
+    imod = 0
+    h_deco = []
 
     for t in range(lin):
    
@@ -337,7 +365,26 @@ def main():
         min_ean = z0
         
         auxtem_ordered = mod.sorting_1d(auxtem)
-    
+        
+        
+        if imod == 0 or imod == 1:
+            auxh_deco = h[t,:] - z0
+            Htotal = auxean-z0
+            vel_aux, cpzin_aux, refined_depth, period_aux = miw.decomposition(ls_fetch[1], auxtem_ordered, Htotal-auxh_deco, Htotal)
+            
+            refined_depth = Htotal - refined_depth
+            h_deco.append(np.concatenate((auxh_deco, [0])))
+            date_model.append(date[t])
+            time_model.append(t*dt)
+            period_time.append(period_aux)
+            vel_time.append(vel_aux)
+            cpzin.append(cpzin_aux)
+            
+            imod = Ndeco
+        else:
+            imod = imod - 1
+        
+            
         if (turn_iso == 1):
             if (tau[0] != -999):
                 isoa[t] = mod.isotherms(tau[0],qt,auxh,auxtem_ordered,max_ean,min_ean,auxisa)
@@ -515,6 +562,13 @@ def main():
     if error_thermo > 0: war.thermocline(dig,100*error_thermo/lin) 
         
     iso = [isoa, isob, isoc, isod]
+    
+    time_model  = np.array(time_model)
+    period_time = np.array(period_time)
+    vel_time    = np.array(vel_time)
+    cpzin       = np.array(cpzin)
+    
+
 
 # period is devided into three shorter sub-periods
 # h: he/H and Wedderburn number for each subperiod (confidence interval with 95%)
@@ -532,6 +586,7 @@ def main():
     W_lim3 = mod.ci(wi_gp[2])    # deifne the aveage of W    of subperiod P3
     
 #date - formating data
+    dx_mod= [datetime.datetime.strptime(d, '%Y/%m/%d/%H/%M') for d in date_model]
     dx    = [datetime.datetime.strptime(d, '%Y/%m/%d/%H/%M') for d in date]
     dx_gp = [dx[i:i+int(lin/3)] for i in range(0, len(dx), int(lin/3))]
     
@@ -542,7 +597,8 @@ def main():
 
 # average of some variables
 
-    mean_temp,low_temp,high_temp = mod.mean_confidence_interval(tempa)
+    mean_temp,low_temp,high_temp = mod.stad_deviation(tempa)
+
     mean_h    = np.mean(h,axis=0)
     
     m_pe   = np.nanmean(pe)
@@ -557,7 +613,7 @@ def main():
     m_p3   = np.nanmean(p3)
     m_glin = np.nanmean(glin)
     m_wast = np.nanmean(wast)
-    m_n    = np.nanmean(n)
+    m_n    = np.nanmean(n)/2*np.pi
     m_riw  = np.nanmean(riw)
     m_ht   = np.nanmean(ht)
     
@@ -1046,18 +1102,39 @@ def main():
             if(sen[i]==1):
                 np.savetxt(output_path+'textfiles/spectral_sensor'+str(seu[i])+'.txt',np.column_stack((freqe[seu[i]],welch_sensor[seu[i]])), delimiter='\t', header='freq(Hz)\tPSD(m²/Hz)', fmt='%0.8f %0.15f',comments='')
     
-
+    
     np.savetxt(output_path+'textfiles/richardson.txt',np.column_stack((time_win,riwl)), header='000000\t'+'\t'.join(map(str,hlm)), delimiter='\t',comments='')
     np.savetxt(output_path+'textfiles/wind.txt',np.column_stack((time_win,dw,iw,strs)), delimiter='\t', header='time(hour)\tdirection(o)\tspeed(m/s)\tstress(N/m²)', fmt='%0.8f %0.1f %0.3f %0.6f',comments='')
     np.savetxt(output_path+'textfiles/watercond_mode1.txt',np.column_stack((time_win,pe,ph,he,hh)), delimiter='\t', header='time(hour)\tupper density (kg/m³)\tlower density (kg/m³)\tupper thickness (m)\tlower thickness (m)', fmt='%0.8f %0.6f %0.6f %0.2f %0.2f',comments='')
     np.savetxt(output_path+'textfiles/spectral_wind.txt',np.column_stack((wl_aper_win,welch_win)), delimiter='\t', header='period(hour)\tPSD wind((m/s)²/Hz)', fmt='%0.3f %0.5f',comments='')
     np.savetxt(output_path+'textfiles/stability.txt',np.column_stack((time_win,riw,wedd,iw_dw,iw_up,wedi)), delimiter='\t', header='time(hour)\t Ri(-)\tW (-)\tWmin (-)\tWmax (-)\tWfilt', fmt='%0.3f %0.8f %0.8f %0.8f %0.8f %0.8f',comments='')
+    np.savetxt(output_path+'textfiles/buoyancy.txt',np.column_stack((time_win,n)), delimiter='\t', header='time(hour)\t Buoyancy frequency (Hz)', fmt='%0.3f %0.8f',comments='')
     np.savetxt(output_path+'textfiles/thermocline.txt',np.column_stack((time_win,he)), delimiter='\t', header='time(hour)\tupper layer thickness(m)', fmt='%0.3f %0.4f',comments='')
+    np.savetxt(output_path+'textfiles/thermocline_temperature.txt',np.column_stack((time_win,thermo_temp)), delimiter='\t', header='time(hour)\ttemperature (oC)', fmt='%0.3f %0.4f',comments='')    
     np.savetxt(output_path+'textfiles/metalimnion_thickness.txt',np.column_stack((time_win,h2)), delimiter='\t', header='time(hour)\tmetalimnion thickness(m)', fmt='%0.3f %0.4f',comments='')
     np.savetxt(output_path+'textfiles/internal_periods.txt',np.column_stack((time_win,v1mode, v2mode)), delimiter='\t', header='time(hour)\tV1H1 period(s)\tV2H1 period(s)', fmt='%0.3f %0.4f %0.4f',comments='')
-    np.savetxt(output_path+'textfiles/mean_profile.txt',np.column_stack((mean_h,mean_temp)), delimiter='\t', header='mab\ttemperature (dC)', fmt='%0.3f %0.4f',comments='')
+    np.savetxt(output_path+'textfiles/mean_profile.txt',np.column_stack((mean_h,mean_temp,low_temp,high_temp)), delimiter='\t', header='mab\ttemperature (dC)\tmin temp (dC)\tmax temp (dC)', fmt='%0.3f %0.4f %0.4f %0.4f',comments='')
     np.savetxt(output_path+'textfiles/wd_event.txt',np.column_stack((time_win,dw_lit,dw_spi,dw_hom,fdire)), delimiter='\t', header='time(hour)\tliterature(o)\tSpigel(o)\thomogeneous(-)\tfhomog(-)', fmt='%0.3f %0.2f %0.2f %0.2f %0.5f',comments='')
+    np.savetxt(output_path+'textfiles/modal_temporal_periods.txt',np.column_stack((time_model,period_time[:,0],period_time[:,1],period_time[:,2],period_time[:,3],period_time[:,4])), delimiter='\t', header='time(hour)\tV1H1 (h)\tV2H1 (h)\tV3H1 (h)\tV4H1 (h)\tV5H1 (h)', fmt='%0.3f %0.2f %0.2f %0.2f %0.2f %0.2f',comments='')
     
+    np.savetxt(output_path+'textfiles/mab_decomp.txt',np.column_stack((refined_depth.T)), delimiter='\t', header='water depth (m)\t', fmt='%0.3f ',comments='')
+    np.savetxt(output_path+'textfiles/time_decomp.txt',np.column_stack((time_model.T)), delimiter='\t', header='time(hour)\t', fmt='%0.3f ',comments='')
+    np.savetxt(output_path+'textfiles/mab_decomp_oiginal.txt',np.column_stack((h_deco)), delimiter='\t', fmt='%0.3f ',comments='')
+
+
+    np.savetxt(output_path+'textfiles/uarbit_decomp_mode1.txt',np.column_stack((vel_time[:,:,0])), delimiter='\t', fmt='%0.15e ',comments='')
+    np.savetxt(output_path+'textfiles/uarbit_decomp_mode2.txt',np.column_stack((vel_time[:,:,1])), delimiter='\t', fmt='%0.15e ',comments='')
+    np.savetxt(output_path+'textfiles/uarbit_decomp_mode3.txt',np.column_stack((vel_time[:,:,2])), delimiter='\t', fmt='%0.15e ',comments='')
+    np.savetxt(output_path+'textfiles/uarbit_decomp_mode4.txt',np.column_stack((vel_time[:,:,3])), delimiter='\t', fmt='%0.15e ',comments='')
+    np.savetxt(output_path+'textfiles/uarbit_decomp_mode5.txt',np.column_stack((vel_time[:,:,4])), delimiter='\t', fmt='%0.15e ',comments='')
+
+    np.savetxt(output_path+'textfiles/cpzinho_mode1.txt',np.column_stack((cpzin[:,0,:])), delimiter='\t', fmt='%0.15e ',comments='')
+    np.savetxt(output_path+'textfiles/cpzinho_mode2.txt',np.column_stack((cpzin[:,1,:])), delimiter='\t', fmt='%0.15e ',comments='')
+    np.savetxt(output_path+'textfiles/cpzinho_mode3.txt',np.column_stack((cpzin[:,2,:])), delimiter='\t', fmt='%0.15e ',comments='')
+    np.savetxt(output_path+'textfiles/cpzinho_mode4.txt',np.column_stack((cpzin[:,3,:])), delimiter='\t', fmt='%0.15e ',comments='')
+    np.savetxt(output_path+'textfiles/cpzinho_mode5.txt',np.column_stack((cpzin[:,4,:])), delimiter='\t', fmt='%0.15e ',comments='')
+
+
     if rad == 1:
         np.savetxt(output_path+'textfiles/spectral_solar.txt',np.column_stack((wl_aper_sol,welch_sol)), delimiter='\t', header='period(hour)\tPSD sw((W/m²)²/Hz)', fmt='%0.3f %0.5f',comments='')
 
@@ -1531,7 +1608,23 @@ def main():
         graph.depth_bandpass(dx, s_filtered,depth, time_win,sen, ax1)
         plt.savefig(output_path+'depth_bandpass.png',dpi = depi)
 
-  
+
+        plt.figure( figsize=(6,6))
+        ax = plt.subplot2grid((1,1),(0,0))
+
+        graph.modal_period(dx_mod, period_time, ax)
+
+        plt.savefig(output_path+'mode_period.png', dpi = depi)  
+        
+
+        for i in range(5):
+            
+            plt.figure( figsize=(8,4))
+            ax = plt.subplot2grid((1,1),(0,0))
+
+            graph.velocity_mode(dx_mod, vel_time[:,:,i], refined_depth, np.mean(period_time[:,i]),  i, ax)
+
+            plt.savefig(output_path+'velocity_abitrary_mode'+str(i)+'.png', dpi = depi)  
     
     print (">         Making the Interwave Analyzer's report")
     root.update()
