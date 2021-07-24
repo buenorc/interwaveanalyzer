@@ -8,7 +8,7 @@ modififications to previosly versions must be specified here using WAVE codes:
 W-23.02-1.00.3-00
 A-01.02-1.00.3-01
 V-22.02-1.00.4-01
-E-05.02-1.00.4-01
+E-05.02-1.00.4-02
 """
 
 # -----------------------------------------------------------------------------
@@ -29,6 +29,7 @@ import os
 import sys
 import time
 import datetime
+import platform
 import numpy as np
 
 from tkinter import *
@@ -59,8 +60,10 @@ def main():
     root.configure(background='white')
     root.title("Interwave Analyzer Running") 
     root.geometry('800x800')
-    
-    root.iconbitmap("interwave_icon.ico")
+
+
+    if platform.system() == 'Windows':
+        root.iconbitmap("interwave_icon.ico")
 
     outputPanel = Text(root, wrap='word', height=30, width=100)
     outputPanel.grid(column=0, row=0, columnspan = 2, sticky='NSWE', padx=5, pady=5)

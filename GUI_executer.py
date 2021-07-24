@@ -8,13 +8,14 @@ modififications to previosly versions must be specified here using WAVE codes:
 W-23.01-1.00.3-00
 A-01.01-2.00.3-00
 V-22.01-2.00.3-00
-E-05.01-2.00.3-00
+E-05.01-2.00.3-01
 """
 
 from tkinter import *
 from tkinter.filedialog import *
 from tkinter.font import *
 
+import platform
 import webbrowser
 import tkinter.ttk as tka
 import subprocess
@@ -529,7 +530,10 @@ window = Tk()
 
 
 window.geometry("800x800")
-window.iconbitmap("interwave_icon.ico")
+
+if platform.system() == 'Windows':
+    window.iconbitmap("interwave_icon.ico")
+    
 window.title("Interwave Analyzer") 
 
 
