@@ -1096,20 +1096,20 @@ def main():
     if turn_iso == 1:
         for i in range(4):
             if(tau[i]!=-999):
-                np.savetxt(output_path+'textfiles/spectral_isotherms'+str(tau[i])+'.txt', np.column_stack((freq[i],welch[i])), delimiter='\t', header='freq(Hz)\tPSD(oC²/Hz)', fmt='%0.8f %0.15f',comments='')                
+                np.savetxt(output_path+'textfiles/spectral_isotherms'+str(tau[i])+'.txt', np.column_stack((freq[i],welch[i])), delimiter='\t', header='freq(Hz)\tPSD(oC2/Hz)', fmt='%0.8f %0.15f',comments='')                
                 np.savetxt(output_path+'textfiles/isotherms'+str(tau[i])+'.txt',np.column_stack((time_temp[i],iso[i])), delimiter='\t', header='time(hour)\tisotherm(oC)', fmt='%0.8f %0.5f',comments='')
-                np.savetxt(output_path+'textfiles/rednoise_isotherms'+str(tau[i])+'.txt', np.column_stack((wr[i],conf[i])), delimiter='\t', header='freq(Hz)\tPSD(oC²/Hz)', fmt='%0.8f %0.15f',comments='')
+                np.savetxt(output_path+'textfiles/rednoise_isotherms'+str(tau[i])+'.txt', np.column_stack((wr[i],conf[i])), delimiter='\t', header='freq(Hz)\tPSD(oC2/Hz)', fmt='%0.8f %0.15f',comments='')
                 
     if turn_temp == 1:
         for i in range(4):
             if(sen[i]==1):
-                np.savetxt(output_path+'textfiles/spectral_sensor'+str(seu[i])+'.txt',np.column_stack((freqe[seu[i]],welch_sensor[seu[i]])), delimiter='\t', header='freq(Hz)\tPSD(m²/Hz)', fmt='%0.8f %0.15f',comments='')
+                np.savetxt(output_path+'textfiles/spectral_sensor'+str(seu[i])+'.txt',np.column_stack((freqe[seu[i]],welch_sensor[seu[i]])), delimiter='\t', header='freq(Hz)\tPSD(m2/Hz)', fmt='%0.8f %0.15f',comments='')
     
     
     np.savetxt(output_path+'textfiles/richardson.txt',np.column_stack((time_win,riwl)), header='000000\t'+'\t'.join(map(str,hlm)), delimiter='\t',comments='')
-    np.savetxt(output_path+'textfiles/wind.txt',np.column_stack((time_win,dw,iw,strs)), delimiter='\t', header='time(hour)\tdirection(o)\tspeed(m/s)\tstress(N/m²)', fmt='%0.8f %0.1f %0.3f %0.6f',comments='')
-    np.savetxt(output_path+'textfiles/watercond_mode1.txt',np.column_stack((time_win,pe,ph,he,hh)), delimiter='\t', header='time(hour)\tupper density (kg/m³)\tlower density (kg/m³)\tupper thickness (m)\tlower thickness (m)', fmt='%0.8f %0.6f %0.6f %0.2f %0.2f',comments='')
-    np.savetxt(output_path+'textfiles/spectral_wind.txt',np.column_stack((wl_aper_win,welch_win)), delimiter='\t', header='period(hour)\tPSD wind((m/s)²/Hz)', fmt='%0.3f %0.5f',comments='')
+    np.savetxt(output_path+'textfiles/wind.txt',np.column_stack((time_win,dw,iw,strs)), delimiter='\t', header='time(hour)\tdirection(o)\tspeed(m/s)\tstress(N/m2)', fmt='%0.8f %0.1f %0.3f %0.6f',comments='')
+    np.savetxt(output_path+'textfiles/watercond_mode1.txt',np.column_stack((time_win,pe,ph,he,hh)), delimiter='\t', header='time(hour)\tupper density (kg/m3)\tlower density (kg/m3)\tupper thickness (m)\tlower thickness (m)', fmt='%0.8f %0.6f %0.6f %0.2f %0.2f',comments='')
+    np.savetxt(output_path+'textfiles/spectral_wind.txt',np.column_stack((wl_aper_win,welch_win)), delimiter='\t', header='period(hour)\tPSD wind((m/s)2/Hz)', fmt='%0.3f %0.5f',comments='')
     np.savetxt(output_path+'textfiles/stability.txt',np.column_stack((time_win,riw,wedd,iw_dw,iw_up,wedi)), delimiter='\t', header='time(hour)\t Ri(-)\tW (-)\tWmin (-)\tWmax (-)\tWfilt', fmt='%0.3f %0.8f %0.8f %0.8f %0.8f %0.8f',comments='')
     np.savetxt(output_path+'textfiles/buoyancy.txt',np.column_stack((time_win,n)), delimiter='\t', header='time(hour)\t Buoyancy frequency (Hz)', fmt='%0.3f %0.8f',comments='')
     np.savetxt(output_path+'textfiles/thermocline.txt',np.column_stack((time_win,he)), delimiter='\t', header='time(hour)\tupper layer thickness(m)', fmt='%0.3f %0.4f',comments='')
@@ -1139,7 +1139,7 @@ def main():
 
 
     if rad == 1:
-        np.savetxt(output_path+'textfiles/spectral_solar.txt',np.column_stack((wl_aper_sol,welch_sol)), delimiter='\t', header='period(hour)\tPSD sw((W/m²)²/Hz)', fmt='%0.3f %0.5f',comments='')
+        np.savetxt(output_path+'textfiles/spectral_solar.txt',np.column_stack((wl_aper_sol,welch_sol)), delimiter='\t', header='period(hour)\tPSD sw((W/m2)2/Hz)', fmt='%0.3f %0.5f',comments='')
 
 # -----------------------------------------------------------------------------    
     print ("> Part VI       Plotting graphs and making reports... ")
@@ -1653,7 +1653,7 @@ def main():
     canvas.drawString(120, 703, str(ini[2]) +' / '+str(ini[1])+' / '+str(ini[0])+' at '+str(ini[3])+'h  to '+ str(fin[2]) +' / '+str(fin[1])+' / '+str(fin[0])+' at '+str(fin[3])+'h')
     canvas.line(115,700,550,700)
 
-    canvas.drawString(30, 660, 'Basin Length (wind direction:   '+str(round(dw_mean,0))+'° \xb1 '+str(round(linang,0))+'°)')
+    canvas.drawString(30, 660, 'Basin Length (wind direction:   '+str(round(dw_mean,0))+'o \xb1 '+str(round(linang,0))+'o)')
     canvas.drawString(30, 645, 'min: '+str(round(ls_fetch[0],0))+' m; max: '+str(round(ls_fetch[2],0))+' m; ave: '     +str(round(ls_fetch[1],0))+' m')
     canvas.drawString(30, 625, 'Layers Thickness (Total depth: '+str(round(m_he+m_hh,2))+' m):')
     canvas.drawString(30, 610, 'Two-layer')
@@ -1671,23 +1671,23 @@ def main():
     canvas.drawString(30, 530, 'Layers Density and stratification:')
     canvas.drawString(30, 515, 'Two-layer ')
     canvas.drawString(110, 515, 'Epilimnion')
-    canvas.drawString(180, 515, str(round(m_pe,2))+' kg/m³')
+    canvas.drawString(180, 515, str(round(m_pe,2))+' kg/m3')
     canvas.drawString(110, 500, 'Hypolimnion')
-    canvas.drawString(180, 500, str(round(m_ph,2))+' kg/m³')
+    canvas.drawString(180, 500, str(round(m_ph,2))+' kg/m3')
     canvas.drawString(30, 485, 'Three-layer')
     canvas.drawString(110, 485, 'Epilimnion')
-    canvas.drawString(180, 485, str(round(m_p1,2))+' kg/m³')
+    canvas.drawString(180, 485, str(round(m_p1,2))+' kg/m3')
     canvas.drawString(110, 470, 'Metalimnion')
-    canvas.drawString(180, 470, str(round(m_p2,2))+' kg/m³')
+    canvas.drawString(180, 470, str(round(m_p2,2))+' kg/m3')
     canvas.drawString(110, 455, 'Hypolimnion')
-    canvas.drawString(180, 455,  str(round(m_p3,2))+' kg/m³')
+    canvas.drawString(180, 455,  str(round(m_p3,2))+' kg/m3')
 
 
     canvas.drawString(30, 425, 'Wind parameters: ')
     canvas.drawString(30, 405, 'Duration of the strongest wind event:')
     canvas.drawString(210, 405,  str(round(dura/(60*60),2))+' h')
     canvas.drawString(30, 385, 'Just considering homogeneous direction:')
-    canvas.drawString(30, 370,  str(round(dire/(60*60),2))+' h blowing '+str(round(m_dw_spi,0))+'° (c. nautica)')
+    canvas.drawString(30, 370,  str(round(dire/(60*60),2))+' h blowing '+str(round(m_dw_spi,0))+'o (c. nautica)')
     canvas.drawString(30, 350, 'Reduction factor:')
     canvas.drawString(120, 350, 'Duration factor:')
     canvas.drawString(210, 350,  str(round(fdura,3)))
@@ -1721,7 +1721,7 @@ def main():
 
     canvas.drawString(30, 170, 'Paramters of Stability:')
     canvas.drawString(30, 150, 'Reduced Gravity:')
-    canvas.drawString(120, 150,  "{:.2e}".format(round(m_glin,4))+' \xb1 '+"{:.2e}".format(round(mod.ciout(glin),4))+' m/s²')
+    canvas.drawString(120, 150,  "{:.2e}".format(round(m_glin,4))+' \xb1 '+"{:.2e}".format(round(mod.ciout(glin),4))+' m/s2')
     canvas.drawString(30, 135, 'Brunt-Vaisalla:')
     canvas.drawString(120, 135,  "{:.2e}".format(round(m_n,4))+' \xb1 '+"{:.2e}".format(round(mod.ciout(n),4))+' Hz')
     canvas.drawString(30, 120, 'Averaged Richardson number:')
@@ -1786,7 +1786,7 @@ def main():
     canvas.drawString(340,435,'Surface seiche amplitude:')
     canvas.drawString(480,435, str(round(1000*ampli_spigel*m_glin/9.81,2))+' mm')
 
-    canvas.drawString(340,410,'Generation & Degeneration Theory¹:')
+    canvas.drawString(340,410,'Generation & Degeneration Theory1:')
 
     canvas.drawString(340,395,'Periods')
     canvas.drawString(400,395,'1/W')
@@ -1812,7 +1812,7 @@ def main():
     canvas.drawString(340,280,'P3')
     canvas.drawString(400,280, str(round(np.nanmax(wi_gp[2])*m_he/2,3))+' m')
 
-    canvas.drawString(340,260,'¹ Strongest BSIW that should be detected')
+    canvas.drawString(340,260,'1 Strongest BSIW that should be detected')
     canvas.drawString(150,230,'Probable amplitude of BSIW according to Wedderburn number:')
 
 
@@ -1880,7 +1880,7 @@ def main():
     canvas.drawString(300,130,'Wedderburn < 3')
     canvas.drawString(300,110,'Periods')
     canvas.drawString(370,110,'Amplitude')
-    canvas.drawString(450,110,'Duration Ratio²')
+    canvas.drawString(450,110,'Duration Ratio2')
 
     canvas.drawString(300,95,'P1')
     wig_ave, ratio = mod.amplitude_average(wi_gp[0],m_he,3)
@@ -1897,7 +1897,7 @@ def main():
     canvas.drawString(370,65, str(round(wig_ave,3))+' m')
     canvas.drawString(450,65, str(round(ratio,4)))
 
-    canvas.drawString(30,40,'² Ratio between duration period of Wedderburn < than the criteria and the total period')
+    canvas.drawString(30,40,'2 Ratio between duration period of Wedderburn < than the criteria and the total period')
 
 
     canvas.showPage()
