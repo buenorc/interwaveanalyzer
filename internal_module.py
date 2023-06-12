@@ -555,16 +555,19 @@ def chi2inv(p, nfft, nperseg, test=None):
 
 def stad_deviation(data):
 
-    m, lower, upper = [], [], []
+    m, lower, upper, sd_lower, sd_upper = [], [], [], [], []
     for i in range(len(data[0,:])):
         
         m.append(np.mean(data[:,i],axis=0))
         sd = ciout(data[:,i])
+        sd_simple = np.std(data[:,i])
 
         upper.append(m[i] + sd)
         lower.append(m[i] - sd)
+        sd_upper.append(m[i] + sd_simple)
+        sd_lower.append(m[i] - sd_simple)
         
-    return np.array(m), np.array(lower), np.array(upper)
+    return np.array(m), np.array(lower), np.array(upper),  np.array(sd_lower), np.array(sd_upper)
     
 
 def conflevel(Ax,npr,dt,rho,wr,nfft,nperseg):

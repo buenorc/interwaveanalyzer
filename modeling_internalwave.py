@@ -33,7 +33,6 @@ def decomposition(L,tau,h, H):
     h = np.concatenate((h,[H]))
     H = h[-1]
 
-
     refined_depth = np.linspace(0,H,N)
     dz = refined_depth[1] - refined_depth[0]
 
@@ -69,9 +68,13 @@ def decomposition(L,tau,h, H):
 
         for i in range(N):         # contour that represents a depth vector in meters (1 m to 100 m)
             ii = 1                     # second index (ii) to evaluate
-            while h[ii] > refined_depth[i] :   # 
-                ii = ii + 1
-        
+            
+            try:
+                while h[ii] > refined_depth[i]:   # 
+                    ii = ii + 1
+            except:
+                    ii = ii - 1
+                    
             if buoy[ii-1] > -1:
                 bv[i] = buoy[ii-1]
             else:
@@ -179,6 +182,7 @@ def disp_zmodel (pe,ph,he,hh,L,m):
 #   Model Function: 1D non-hydrostatic analytical model for two-layer system
 #   Returns the period of BSIW modes considering basin length variation
 #
+    
     gamma = pe/ph
     
     peri_min = biquadratic(L[0],he,hh,gamma,m)

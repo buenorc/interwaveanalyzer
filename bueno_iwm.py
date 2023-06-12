@@ -75,7 +75,7 @@ def main():
     root.update()
     print ("--------------------------------------------------------------------------------------")
     root.update()
-    print ("> Interwave Analyzer, version 1.00.3        September   2020")
+    print ("> Interwave Analyzer, version 1.01.1        April   2023")
     root.update()  
     print ("> ")
     root.update() 
@@ -203,7 +203,7 @@ def main():
     date, temp, serialt, dt = load.temper_read(nam,lin,qt)
     ean, h, tempa           = load.serial_cota(serialt,nac,lin,qt,temp,sen_nam,ean_serie,ean_cota,z0)
     wind, dw, ra            = load.serial_wind(serialt,win,rad,lin)
-
+    seu = seu - 1
             
     if type_length == 1: 
         angle, dists = None, len_basin 
@@ -252,6 +252,7 @@ def main():
                     dt_decom = dt 
                     war.decomp_changed(dig,dt*60)                     
     
+
     Ndeco = int(dt_decom/dt)
 
     
@@ -438,6 +439,8 @@ def main():
     # wind parameterization
         try:
             tbsiw = 2*ls_fetch[1]/np.sqrt(glin[t]*he[t]*hh[t]/(he[t]+hh[t])) # Merian
+            # if np.isnan(tbsiw) == True:
+            #     tbsiw = 2*ls_fetch[1]/np.sqrt(np.nanmean(glin)*np.nanmean(he)*np.nanmean(hh)/(np.nanmean(he)+np.nanmean(hh)))
         except RuntimeWarning:
             tbsiw = None
             war.merian(dig)
@@ -452,6 +455,7 @@ def main():
         if min_spigel < 1:             # verify the minimum W for IW activity
             wedd_aux = min_spigel
 
+    
         winsiz = int(0.25/2*tbsiw/dt/3600)
         points = t-winsiz
         polong = t-int(2*winsiz)
@@ -599,8 +603,7 @@ def main():
     P3    = [dx_gp[2][0], dx_gp[2][-1]]
 
 # average of some variables
-
-    mean_temp,low_temp,high_temp = mod.stad_deviation(tempa)
+    mean_temp,low_temp,high_temp,low_temp_sd,high_temp_sd = mod.stad_deviation(tempa)
 
     mean_h    = np.mean(h,axis=0)
     
@@ -616,7 +619,7 @@ def main():
     m_p3   = np.nanmean(p3)
     m_glin = np.nanmean(glin)
     m_wast = np.nanmean(wast)
-    m_n    = np.nanmean(n)/2*np.pi
+    m_n    = np.nanmean(n)/(2*np.pi)
     m_riw  = np.nanmean(riw)
     m_ht   = np.nanmean(ht)
     
@@ -685,7 +688,7 @@ def main():
 
 # theoretical periods
        
-        
+      
     pv1h1 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,1))
     pv1h2 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,2))
     pv1h3 = np.array(miw.disp_zmodel(m_pe,m_ph,m_he,m_hh,ls_fetch,3))
@@ -697,6 +700,8 @@ def main():
     pv3h1 = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,1))
     pv3h2 = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,2))
     pv3h3 = np.array(miw.disp_xmodel4(m_p1,np2,np3,m_p3,nh1,nh2,nh3,nh4,ls_fetch,3,3))
+
+
 
 #  internal wave frequency (without and with Earth rotation effect)
        
@@ -711,9 +716,18 @@ def main():
     else:
         Bu = 0
 
-    f11, cf11  = 1/pv1h1, 1/miw.coriolis_effect(fc,pv1h1)
-    f21, cf21  = 1/pv2h1, 1/miw.coriolis_effect(fc,pv2h1)
-    f31, cf31  = 1/pv3h1, 1/miw.coriolis_effect(fc,pv3h1)
+    try:
+        f11, cf11  = 1/pv1h1, 1/miw.coriolis_effect(fc,pv1h1)
+    except:
+        f11, cf11 = 0, 0
+    try:
+        f21, cf21  = 1/pv2h1, 1/miw.coriolis_effect(fc,pv2h1)
+    except:
+        f21, cf21  =  0, 0
+    try:
+        f31, cf31  = 1/pv3h1, 1/miw.coriolis_effect(fc,pv3h1)
+    except:
+        f31, cf31  = 0, 0
 
 # model sensitivity using the hydrostatic model  
 
@@ -818,10 +832,15 @@ def main():
                 filtered_band = None
                 war.bandpass(dig,'sensor')
             
- 
-            aux_time, aux_per, aux_power = mod.wave_spectral ( new, dt, mother)
-            aux_freq, aux_wl_per, aux_welch, aux_wr, aux_conf = mod.welch_method(new,windsizeuser,window, dt)
-        
+            try:
+                aux_time, aux_per, aux_power = mod.wave_spectral ( new, dt, mother)
+                aux_freq, aux_wl_per, aux_welch, aux_wr, aux_conf = mod.welch_method(new,windsizeuser,window, dt)
+            except RuntimeWarning:
+                war.spectral(dig,'sensor')
+                aux_time, aux_per, aux_power = 0,0,0
+                aux_freq, aux_wl_per, aux_welch, aux_wr, aux_conf = 0,0,0,0,0
+                
+
             sensor_filtered.append(filtered_band)
 
             timee.append(aux_time)
@@ -874,10 +893,13 @@ def main():
                 tau[i] = -999        
             
             if(tau[i] != -999):
-                
-                aux_time, aux_per, aux_power = mod.wave_spectral (iso[i], dt, mother)
-                aux_freq, _, aux_welch, aux_wr, aux_conf = mod.welch_method(iso[i],windsizeuser,window, dt)
-                    
+                try:
+                    aux_time, aux_per, aux_power = mod.wave_spectral (iso[i], dt, mother)
+                    aux_freq, _, aux_welch, aux_wr, aux_conf = mod.welch_method(iso[i],windsizeuser,window, dt)
+                except:
+                    aux_time, aux_per, aux_power =  0,0,0
+                    aux_freq, aux_welch, aux_wr, aux_conf = 0,0,0,0
+                    war.spectral(dig,'isotherm')
                 
                 fs = 1/dt
                 
@@ -918,14 +940,21 @@ def main():
 # spectral analysis of the solar radiation
     if rad == 1:
         solar_ws = 5*24*60*60
-        time_sol, per_sol, power_sol     = mod.wave_spectral ( ra, dt, mother)
-        freq_sol, wl_aper_sol, welch_sol, wr_sol, conf_sol = mod.welch_method (ra, solar_ws, window, dt)
-
+        try:
+            time_sol, per_sol, power_sol     = mod.wave_spectral ( ra, dt, mother)
+            freq_sol, wl_aper_sol, welch_sol, wr_sol, conf_sol = mod.welch_method (ra, solar_ws, window, dt)
+        except:
+            time_sol, per_sol, power_sol     = 0,0,0
+            freq_sol, wl_aper_sol, welch_sol, wr_sol, conf_sol = 0,0,0,0,0
+            war.spectral(dig,'radiation')
 #spectral analysis of wind intensity
-
-    time_win, per_win, power_win     = mod.wave_spectral ( iw, dt, mother)
-    freq_win, wl_aper_win, welch_win, wr_win, conf_win = mod.welch_method (iw, windsizeuser, window, dt)
-
+    try:
+        time_win, per_win, power_win     = mod.wave_spectral ( iw, dt, mother)
+        freq_win, wl_aper_win, welch_win, wr_win, conf_win = mod.welch_method (iw, windsizeuser, window, dt)
+    except:
+        time_win, per_win, power_win     = 0,0,0
+        freq_win, wl_aper_win, welch_win, wr_win, conf_win =  0,0,0,0,0
+        war.spectral(dig,'wind')
 # Coherence (isotherms and meteorological data)
 #
 # ------------------- for depth ----------------------------------------------
@@ -1096,27 +1125,50 @@ def main():
     if turn_iso == 1:
         for i in range(4):
             if(tau[i]!=-999):
-                np.savetxt(output_path+'textfiles/spectral_isotherms'+str(tau[i])+'.txt', np.column_stack((freq[i],welch[i])), delimiter='\t', header='freq(Hz)\tPSD(oC2/Hz)', fmt='%0.8f %0.15f',comments='')                
-                np.savetxt(output_path+'textfiles/isotherms'+str(tau[i])+'.txt',np.column_stack((time_temp[i],iso[i])), delimiter='\t', header='time(hour)\tisotherm(oC)', fmt='%0.8f %0.5f',comments='')
-                np.savetxt(output_path+'textfiles/rednoise_isotherms'+str(tau[i])+'.txt', np.column_stack((wr[i],conf[i])), delimiter='\t', header='freq(Hz)\tPSD(oC2/Hz)', fmt='%0.8f %0.15f',comments='')
-                
+                try:
+                    np.savetxt(output_path+'textfiles/spectral_isotherms'+str(tau[i])+'.txt', np.column_stack((freq[i],welch[i])), delimiter='\t', header='freq(Hz)\tPSD(m2/Hz)', fmt='%0.8f %0.15f',comments='')                
+                    np.savetxt(output_path+'textfiles/isotherms'+str(tau[i])+'.txt',np.column_stack((time_temp[i],iso[i])), delimiter='\t', header='time(hour)\tisotherm(m)', fmt='%0.8f %0.5f',comments='')
+                    np.savetxt(output_path+'textfiles/bandpass_iso'+str(tau[i])+'.txt',np.column_stack((time_temp[i],band[i])), delimiter='\t', header='time(hour)\tisotherm(m)', fmt='%0.8f %0.5f',comments='')
+                    np.savetxt(output_path+'textfiles/rednoise_isotherms'+str(tau[i])+'.txt', np.column_stack((wr[i],conf[i])), delimiter='\t', header='freq(Hz)\tPSD(m2/Hz)', fmt='%0.8f %0.15f',comments='')
+                except:
+                    0
     if turn_temp == 1:
         for i in range(4):
             if(sen[i]==1):
-                np.savetxt(output_path+'textfiles/spectral_sensor'+str(seu[i])+'.txt',np.column_stack((freqe[seu[i]],welch_sensor[seu[i]])), delimiter='\t', header='freq(Hz)\tPSD(m2/Hz)', fmt='%0.8f %0.15f',comments='')
-    
+                try:
+                    np.savetxt(output_path+'textfiles/spectral_sensor'+str(seu[i])+'.txt',np.column_stack((freqe[seu[i]],welch_sensor[seu[i]])), delimiter='\t', header='freq(Hz)\tPSD(m2/Hz)', fmt='%0.8f %0.15f',comments='')
+                    np.savetxt(output_path+'textfiles/sensor'+str(seu[i])+'.txt',np.column_stack((timee[seu[i]],new[seu[i]])), delimiter='\t', header='time(hour)\ttemperature(oC)', fmt='%0.8f %0.5f',comments='')
+                    np.savetxt(output_path+'textfiles/bandpass_sen'+str(seu[i])+'.txt',np.column_stack((timee[seu[i]],sensor_filtered[seu[i]])), delimiter='\t', header='time(hour)\ttemperature(oC)', fmt='%0.8f %0.5f',comments='')
+                    np.savetxt(output_path+'textfiles/rednoise_sensor'+str(seu[i])+'.txt', np.column_stack((wr_sensor[seu[i]],conf_sensor[seu[i]])), delimiter='\t', header='freq(Hz)\tPSD(oC2/Hz)', fmt='%0.8f %0.15f',comments='')
+                except:
+                    0
+    r = 0
+    for i in range(4):
+        for j in range(4):
+            if ( i != j and j > i):
+                if(tau[i] != -999) and (tau[j] != -999):
+                    try:
+                        np.savetxt(output_path+'textfiles/iso_spectralpair_'+str(tau[i])+'_'+str(tau[j])+'.txt',np.column_stack((friso[r],phiso[r],coiso[r],cliso[r])), delimiter='\t', header='frequency(hour)\t phase\t coherence\t coherenceg95', fmt='%0.3f %0.8f',comments='')
+                    except:
+                        0
+                    r = r + 1
     
     np.savetxt(output_path+'textfiles/richardson.txt',np.column_stack((time_win,riwl)), header='000000\t'+'\t'.join(map(str,hlm)), delimiter='\t',comments='')
     np.savetxt(output_path+'textfiles/wind.txt',np.column_stack((time_win,dw,iw,strs)), delimiter='\t', header='time(hour)\tdirection(o)\tspeed(m/s)\tstress(N/m2)', fmt='%0.8f %0.1f %0.3f %0.6f',comments='')
     np.savetxt(output_path+'textfiles/watercond_mode1.txt',np.column_stack((time_win,pe,ph,he,hh)), delimiter='\t', header='time(hour)\tupper density (kg/m3)\tlower density (kg/m3)\tupper thickness (m)\tlower thickness (m)', fmt='%0.8f %0.6f %0.6f %0.2f %0.2f',comments='')
-    np.savetxt(output_path+'textfiles/spectral_wind.txt',np.column_stack((wl_aper_win,welch_win)), delimiter='\t', header='period(hour)\tPSD wind((m/s)2/Hz)', fmt='%0.3f %0.5f',comments='')
+    
+    try:
+        np.savetxt(output_path+'textfiles/spectral_wind.txt',np.column_stack((wl_aper_win,welch_win)), delimiter='\t', header='period(hour)\tPSD wind((m/s)2/Hz)', fmt='%0.3f %0.5f',comments='')
+    except:
+        0
+        
     np.savetxt(output_path+'textfiles/stability.txt',np.column_stack((time_win,riw,wedd,iw_dw,iw_up,wedi)), delimiter='\t', header='time(hour)\t Ri(-)\tW (-)\tWmin (-)\tWmax (-)\tWfilt', fmt='%0.3f %0.8f %0.8f %0.8f %0.8f %0.8f',comments='')
     np.savetxt(output_path+'textfiles/buoyancy.txt',np.column_stack((time_win,n)), delimiter='\t', header='time(hour)\t Buoyancy frequency (Hz)', fmt='%0.3f %0.8f',comments='')
     np.savetxt(output_path+'textfiles/thermocline.txt',np.column_stack((time_win,he)), delimiter='\t', header='time(hour)\tupper layer thickness(m)', fmt='%0.3f %0.4f',comments='')
     np.savetxt(output_path+'textfiles/thermocline_temperature.txt',np.column_stack((time_win,thermo_temp)), delimiter='\t', header='time(hour)\ttemperature (oC)', fmt='%0.3f %0.4f',comments='')    
     np.savetxt(output_path+'textfiles/metalimnion_thickness.txt',np.column_stack((time_win,h2)), delimiter='\t', header='time(hour)\tmetalimnion thickness(m)', fmt='%0.3f %0.4f',comments='')
     np.savetxt(output_path+'textfiles/internal_periods.txt',np.column_stack((time_win,v1mode, v2mode)), delimiter='\t', header='time(hour)\tV1H1 period(s)\tV2H1 period(s)', fmt='%0.3f %0.4f %0.4f',comments='')
-    np.savetxt(output_path+'textfiles/mean_profile.txt',np.column_stack((mean_h,mean_temp,low_temp,high_temp)), delimiter='\t', header='mab\ttemperature (dC)\tmin temp (dC)\tmax temp (dC)', fmt='%0.3f %0.4f %0.4f %0.4f',comments='')
+    np.savetxt(output_path+'textfiles/mean_profile.txt',np.column_stack((mean_h,mean_temp,low_temp,high_temp,low_temp_sd,high_temp_sd)), delimiter='\t', header='mab\ttemperature (dC)\tmin conf95 (dC)\tmax conf95 (dC)\tmin sd (dC)\tmax sd (dC)', fmt='%0.3f %0.4f %0.4f %0.4f %0.4f %0.4f',comments='')
     np.savetxt(output_path+'textfiles/wd_event.txt',np.column_stack((time_win,dw_lit,dw_spi,dw_hom,fdire)), delimiter='\t', header='time(hour)\tliterature(o)\tSpigel(o)\thomogeneous(-)\tfhomog(-)', fmt='%0.3f %0.2f %0.2f %0.2f %0.5f',comments='')
     np.savetxt(output_path+'textfiles/modal_temporal_periods.txt',np.column_stack((time_model,period_time[:,0],period_time[:,1],period_time[:,2],period_time[:,3],period_time[:,4])), delimiter='\t', header='time(hour)\tV1H1 (h)\tV2H1 (h)\tV3H1 (h)\tV4H1 (h)\tV5H1 (h)', fmt='%0.3f %0.2f %0.2f %0.2f %0.2f %0.2f',comments='')
     
@@ -1137,10 +1189,19 @@ def main():
     np.savetxt(output_path+'textfiles/cpzinho_mode4.txt',np.column_stack((cpzin[:,3,:])), delimiter='\t', fmt='%0.15e ',comments='')
     np.savetxt(output_path+'textfiles/cpzinho_mode5.txt',np.column_stack((cpzin[:,4,:])), delimiter='\t', fmt='%0.15e ',comments='')
 
+    
+    np.savetxt(output_path+'textfiles/time_python.txt',dx, fmt='%s',comments='')
 
+    np.savetxt(output_path+'textfiles/thermo_wavelet.txt',powerthermo, fmt='%0.15e ', comments='')
+    np.savetxt(output_path+'textfiles/thermo_wavelet_period.txt',pthermo, fmt='%0.15e ',header='period(hour)',comments='')
+    np.savetxt(output_path+'textfiles/thermo_psd.txt',np.column_stack((wlthermo,welchthermo)), header='Period(hour)\tPSD(oC2/Hz)', fmt='%0.15f ',comments='')
+    np.savetxt(output_path+'textfiles/thermo_psd_siginificance.txt',np.column_stack((wrthermo,confthermo)), header='Period(hour)\tConf(oC2/Hz)', fmt='%0.15f ',comments='')
+    
     if rad == 1:
-        np.savetxt(output_path+'textfiles/spectral_solar.txt',np.column_stack((wl_aper_sol,welch_sol)), delimiter='\t', header='period(hour)\tPSD sw((W/m2)2/Hz)', fmt='%0.3f %0.5f',comments='')
-
+        try:
+            np.savetxt(output_path+'textfiles/spectral_solar.txt',np.column_stack((wl_aper_sol,welch_sol)), delimiter='\t', header='period(hour)\tPSD sw((W/m2)2/Hz)', fmt='%0.3f %0.5f',comments='')
+        except:
+            0
 # -----------------------------------------------------------------------------    
     print ("> Part VI       Plotting graphs and making reports... ")
     root.update()  
@@ -1938,10 +1999,15 @@ def main():
     
     canvas.drawString(100, 370, 'Hydrostatic Model for the first three vertical and horizontal modes:')
 
+    
     canvas.drawString(50, 350, 'V1H1' )
-    canvas.drawString(90, 350,  str(round(pv1h1[1]/(60*60),2))+' h')
+    try:
+        canvas.drawString(90, 350,  str(round(pv1h1[1]/(60*60),2))+' h')
+        canvas.drawString(160, 350, str(round((pv1h1[1]-pv1h1[0])/(60*60),2))+' h')
+    except:
+        canvas.drawString(90, 350,  '0 h')
+        canvas.drawString(160, 350, '0 h')        
     canvas.drawString(140, 350, ' \xb1 ')
-    canvas.drawString(160, 350, str(round((pv1h1[1]-pv1h1[0])/(60*60),2))+' h')
 
     canvas.drawString(50, 335, 'V2H1' )
     canvas.drawString(90, 335,  str(round(pv2h1[1]/(60*60),2))+' h')

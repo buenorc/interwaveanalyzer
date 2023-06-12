@@ -205,7 +205,7 @@ def open_button():
             folder_path = reader.readline()
             
 def AboutCallBack():
-   msg = messagebox.showinfo( "About", " Interwave Analyzer - Version 1.00.3 \n Copyright (C) 2019 Rafael de Carvalho Bueno \n All rights reserved \n \n Developed by \n Rafael de Carvalho Bueno \n\n Co-developer \n Tobias Bleninger \n\n improvements and betterments by \n Andreas Lorke \n\n Report problems and improvements to email adresss below \n rafael.bueno.itt@gmail.com\n \n for mor information, see: \n www.bit.ly/interwave_analyzer \n ")    
+   msg = messagebox.showinfo( "About", " Interwave Analyzer - Version 1.01.1 \n Copyright (C) 2019 Rafael de Carvalho Bueno \n All rights reserved \n \n Developed by \n Rafael de Carvalho Bueno \n\n Co-developer \n Tobias Bleninger \n\n improvements and betterments by \n Andreas Lorke \n\n Report problems and improvements to email adresss below \n decarvalhobueno@gmail.com\n \n for mor information, see: \n www.bit.ly/interwave_analyzer \n ")    
 
 def OpenUrl(url):
     webbrowser.open_new(url)

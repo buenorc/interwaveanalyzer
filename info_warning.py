@@ -9,7 +9,7 @@ modififications to previosly versions must be specified here using WAVE codes:
 W-23.07-1.00.3-01
 A-01.07-1.00.4-01
 V-22.07-1.00.4-01
-E-05.07-1.00.4-01
+E-05.07-1.00.4-02
 
 """
 def decomp_default(dig,dt):
@@ -62,7 +62,7 @@ def profile_structure(dig,mode,estimated):
     dig.write('> It may occurs due to the difficulty to Interwave Analyzer identify the '+stru+' structure \n\n\n')         
 
 def merian(dig):
-    dig.write('> Warning: Merian equation was not computed \n')
+    dig.write('> Warning: Merian equation was not computed correctly\n')
     dig.write('> The Ri will not be filtered considering the duration of the wind event\n\n\n')
 
 def metalimnion(dig,estimated):
@@ -98,3 +98,22 @@ def bandpass(dig,typ):
         dig.write('> have not been band pass-filtered \n\n\n')            
     if typ == 'isotherm':
         dig.write('> Warning: one or more isotherms have not been band pass-filtered\n\n\n')
+        
+def spectral(dig,typ):
+
+    if typ == 'sensor':
+        dig.write('> Warning: the temperature signals from one or more sensors\n')
+        dig.write('> could not be analyzed on spectral methods \n')  
+        dig.write('> This problem can arise due to constant array value \n\n\n')            
+    if typ == 'isotherm':
+        dig.write('> Warning: the temperature signals from one or more sensors\n')
+        dig.write('> could not be analyzed on spectral methods \n')  
+        dig.write('> This problem can arise due to constant array value \n\n\n')  
+    if typ == 'radiation':
+        dig.write('> Warning: Radiation is activated but does not vary with time\n')
+        dig.write('> Espectral methods cannot be performed \n')  
+        dig.write('> Please deactivate solar raidation \n\n\n')  
+    if typ == 'wind':
+        dig.write('> Warning: Wind does not vary with time\n')
+        dig.write('> Espectral methods cannot be performed \n')  
+        dig.write('> Please verify wind information \n\n\n')  
