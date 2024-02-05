@@ -929,13 +929,13 @@ def main():
                 wr.append(0)
                 conf.append([0])
     
-    banda = []
-    for i in range(4):
-        banda.append(np.nanmax(abs(band[i])))
-
-    amax = max(np.array(banda))
-    aind = tau[np.where(banda == amax)]
-         
+        banda = []
+        for i in range(4):
+            banda.append(np.nanmax(abs(band[i])))
+    
+        amax = max(np.array(banda))
+        aind = tau[np.where(banda == amax)]
+             
        
 # spectral analysis of the solar radiation
     if rad == 1:
@@ -960,7 +960,7 @@ def main():
 # ------------------- for depth ----------------------------------------------
 #
     if turn_temp == 1:
-    
+        print(seu[0])
         d1 = mod.depths(seu[0], h, lin)
         d2 = mod.depths(seu[1], h, lin)
         d3 = mod.depths(seu[2], h, lin)
@@ -1389,17 +1389,20 @@ def main():
 
     g   = 12.156*(parh**3)-15.714*(parh**2)+2.8426*parh+2.0846
     f   = g*np.exp((parh**2)/0.25)
-    paramet = 2*f**2*np.log(amax/(0.1*m_he))
+    
+    if turn_iso == 1:
+    
+        paramet = 2*f**2*np.log(amax/(0.1*m_he))
 
-    graph.classification_genera(average_wedda, we_wind, parh,amax/m_he,aind, ax1)
-    graph.bueno_parameterization(average_wedda, we_wind, paramet, aind, ax2)
+        graph.classification_genera(average_wedda, we_wind, parh,amax/m_he,aind, ax1)
+        graph.bueno_parameterization(average_wedda, we_wind, paramet, aind, ax2)
+        
+        plt.tight_layout()
+        plt.savefig(output_path+'classification_evolution.png', dpi = depi)
 
-    plt.tight_layout()
-    plt.savefig(output_path+'classification_evolution.png', dpi = depi)
 
 
-
-    plt.figure( figsize=(8,6))
+    plt.figure(figsize=(8,6))
 
     ax1 = plt.subplot2grid((3,2), (0,0), rowspan=3)
     ax2 = plt.subplot2grid((3,2), (0,1), rowspan=3)
@@ -1594,7 +1597,7 @@ def main():
 
         for jd in range(4):
         
-            if seu[jd] != -999:
+            if seu[jd] >= 0:
                 plt.figure( figsize=(8,6))
                 ax1 = plt.subplot2grid((2,2),(0,0),colspan=2)
                 ax2 = plt.subplot2grid((2,2),(1,0),colspan=2,sharex=ax1)

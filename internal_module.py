@@ -101,7 +101,7 @@ def depths(profile, depth, lin):
     d   = []
     aux = np.zeros((lin),float)
 
-    if profile != -999:
+    if profile >= 0: # -999
         aux[:] = depth[:,profile]
     else:
         aux = None

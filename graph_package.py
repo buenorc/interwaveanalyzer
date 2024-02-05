@@ -432,7 +432,6 @@ def psd_depth(sen, matrix, freq, psd, v1h1, v2h1, v3h1,largelen,n,fo, wo, sig, a
     for i in range(4):
         
         if(sen[i]==1):
-            
             depth = np.nanmean(matrix[i])
             ff    = psd[i]
             f     = freq[i]
@@ -644,7 +643,7 @@ def temperature(date,t,y,color,depth,ax):
     ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
     
     ax.set_xlim([date[0],date[-1]])
-    
+       
     ax.grid(True,which="both",color='black',ls=":",lw=0.25)
     ax.set_ylabel('temp. variation at '+str(round(np.nanmean(depth),2))+' m (°C)')
 
