@@ -35,7 +35,9 @@ Windows, macOS, and Linux);
 that are used by Interwave Analyzer and are not available in Anaconda:
 
 * Nitime (0.7 or compatible): conda install -c conda-forge nitime
-* Reportlab (3.5 or compatible): conda install -c anaconda reportlab
+* Reportlab (3.5 or compatible): conda install conda-forge::reportlab
+
+**Attention:** Some users reported that when installing ReportLab with the command conda install -c anaconda reportlab, the installed version is outdated. This results in a DeprecationWarning that hinders the smooth operation of the Interwave Analyzer due to issues with the ReportLab library.
 
 **Attention:** If you already have anaconda installed in your computer, make sure that the above packages
 are installed and the anaconda version has Python 3.X. If you use another interpreter, make sure that the
