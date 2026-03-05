@@ -5,6 +5,8 @@ The **Interwave Analyzer** is an open-source software designed to investigate th
 
 Using temperature time series from instrumented buoys together with meteorological data, the software identifies internal wave patterns, classifies mixing regimes, and evaluates the degeneration of basin-scale internal waves.
 
+**Version 2** introduces a major refactoring of the codebase, improved computational performance, and the implementation of the **Additional Parameters Framework**, which expands the range of physical diagnostics that can be computed from the input data. The new version also incorporates **bathymetric information and basin asymmetry**, allowing improved estimation of key stability parameters such as the **Lake Number**, **Schmidt Stability**, and related indices of **stratification instability and mixing potential**. These developments also enable a more realistic representation of **sloping topography effects**, improving the physical interpretation of internal wave dynamics in natural lake basins.
+
 ### Current version
 2.260303 (beta testing for Interwave Analyzer Version 2)
 
@@ -19,7 +21,7 @@ Scientific paper repository: https://github.com/buenorc/espaper.git
 ## Installation
 Interwave Analyzer can be executed in two different ways:
 * **Python script version**
-* **Executable version** (recommended for Windows users)
+* **Executable version** (only for Windows users)
 
 More informations about Executable version find on:
 https://buenorc.github.io/pages/interwave.html
