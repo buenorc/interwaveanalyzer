@@ -1,57 +1,102 @@
-## Interwave Analyzer 
+## Interwave Analyzer V2
 ### DOI: 10.5281/zenodo.4264575
 
-The Interwave Analyzer is an open-software designed to investigate the occurrence of basin-scale internal waves in stratified lakes, providing a set of tools to estimate some physical indices to analyze the probability of internal waves activity and lake mixing. The program provides the classification of lake mixing, internal wave patterns, and degeneration of basin-scale internal waves based on well-established theories of internal waves. The Interwave Analyzer provides a powerful, easily accessible, and universal analysis of internal waves from instrumented buoy and meteorological data stations.
+The **Interwave Analyzer** is an open-source software designed to investigate the occurrence of basin-scale internal waves in stratified lakes and reservoirs. The program provides tools to estimate physical indices related to internal wave activity, lake mixing, and stratification dynamics based on established internal wave theories.
 
-### Atual version: 1.01.2
+Using temperature time series from instrumented buoys together with meteorological data, the software identifies internal wave patterns, classifies mixing regimes, and evaluates the degeneration of basin-scale internal waves.
 
-### scientific paper (published with 1.00.3 version):
-de Carvalho Bueno, Bleninger, and Lorke. **Internal wave analyzer for thermally stratified lakes**. *Environmental Modelling and Software*.
+### Current version
+2.260303 (beta testing for Interwave Analyzer Version 2)
 
-GuiHub (scientific paper repository): https://github.com/buenorc/espaper.git
+### Scientific paper (published with version 1.00.3)
 
-### How to run:
+de Carvalho Bueno, Bleninger, and Lorke.  
+**Internal wave analyzer for thermally stratified lakes**. *Environmental Modelling and Software*.
 
-To run the Interwave Analyzer’s scripts in a Python interpreter, the system must have:
-
-* Python interpreter;
-
-* Python packages: Numpy, Datetime, Reportlab, Scipy, Nitime, Matplotlib, and Tkinter;
-
-The steps below describes the installation instruction for Anaconda’s users, which is the simplest way to run
-the Interwave Analyzer’s codes. We recommend the use of Anaconda distribution since it will automatically
-install almost all required additional Python packages. Interwave Analyzer also can be ran through other
-Python interpreters, but additional packages installations is required.
+Scientific paper repository: https://github.com/buenorc/espaper.git
 
 
-To run Interwave Analyzer’s scripts directly in Anaconda interpreter, first download the Anaconda distribution
-for Python 3.x.
+## Installation
+Interwave Analyzer can be executed in two different ways:
+* **Python script version**
+* **Executable version** (recommended for Windows users)
 
-1) Go to Anaconda website (https://www.anaconda.com/) and find the option for Anaconda distribution;
-2) Choose the Python 3.x graphical installer version (note that there are three options for operating system:
-Windows, macOS, and Linux);
-3) Install the Anaconda interpreter;
-4) After the installation, open the Anaconda Prompt (as administrator) and install the following packages
-that are used by Interwave Analyzer and are not available in Anaconda:
+More informations about Executable version find on:
+https://buenorc.github.io/pages/interwave.html
 
-* Nitime (0.7 or compatible): conda install -c conda-forge nitime
-* Reportlab (3.5 or compatible): conda install conda-forge::reportlab
 
-**Attention:** Some users reported that when installing ReportLab with the command conda install -c anaconda reportlab (for python 3.11 or higher), the installed version is outdated. This results in a DeprecationWarning that hinders the smooth operation of the Interwave Analyzer due to issues with the ReportLab library.
+## Script Version (Python)
 
-**Attention:** If you already have anaconda installed in your computer, make sure that the above packages
-are installed and the anaconda version has Python 3.X. If you use another interpreter, make sure that the
-following packages are installed in the your python interpreter: Numpy 1.16.3, Datetime 4.0.1, Reportlab
-3.5.19, Scipy 1.2.1, Nitime 0.7, Matplotlib 3.1.0, and tk (tkinter) 8.6.8, or compatibles versions.
+The script mode allows the Interwave Analyzer to run directly through a Python interpreter. No programming knowledge is required, executing the main script launches the graphical interface automatically.
 
-5) After the installation, go to https://sites.google.com/view/interwaveanalyzer/interwave-analyzer and click on
-Code repository, or access directly our repository in https://github.com/buenorc/interwaveanalyzer;
-6) Download all files .py available to download, including the raster-graphics file-format 0interwave.png
-which is the logo used by the Interwave Analyzer’s report and the icon interwave icon, which is used
-as Interwave Analyzer icon on the GUI;
-7) Put everything in the same folder and run the script called GUIexecuter.py;
-8) A graphical user interface (GUI) should be launched in seconds;
-9) We recommend you to download the example files available at Interwave Analyzer’s website on Download
-example. For a detailed tutorial using these files, see section 5.
+### Required environment
 
-**Attention:** For more information (user manual, how to obtain the pre-compiled version, FAQ, team, etc), please visit: https://sites.google.com/view/interwaveanalyzer/interwave-analyzer
+To run Interwave Analyzer scripts, the system must have:
+
+* Python 3.8 or higher
+* Python packages: NumPy, SciPy, Matplotlib, Dash, Plotly, Tkinter, and Datetime
+
+Most of these libraries are included in standard scientific Python distributions.
+
+## Recommended Environment: Anaconda
+
+We recommend using the **Anaconda Python distribution**, which simplifies installation and dependency management.
+
+Download Anaconda:
+
+https://www.anaconda.com/
+
+### Installation steps
+
+1) Go to the Anaconda website and download the **Anaconda Distribution for Python 3.x**.
+
+2) Choose the graphical installer for your operating system (Windows, macOS, or Linux).
+
+3) Install Anaconda using the recommended default settings.
+
+4) After installation, open the **Anaconda Prompt**.
+
+5) Install the additional packages required by Interwave Analyzer: **conda install -c conda-forge dash plotly**
+   
+**Attention:**  
+If Anaconda is already installed on your computer, make sure that:
+
+* Python 3.x is being used
+* the required packages are installed
+* the environment is activated before running the software
+
+
+## Running the Scripts
+
+1) Visit the Interwave Analyzer webpage:  
+https://buenorc.github.io/pages/interwave.html
+
+2) Click **Code Repository** to access the GitHub repository.
+
+3) Download all `.py` source files.
+
+4) Make sure the folder **assets** contains the following files: iwlogo.png, iwcon.ico, and style.css
+   
+5) Place all files in the same directory (with the assets folder inside this directory).
+
+6) Open the Anaconda Prompt (or activate your Python environment), navigate to the project directory, and run: **python iwgui.py**
+
+The graphical user interface should start automatically within a few seconds.
+
+---
+
+## Example Data
+
+For first-time users, we recommend downloading the example datasets available on the Interwave Analyzer website under **Download Example**.
+
+A detailed tutorial demonstrating the workflow using these datasets is provided in the **User Manual**.
+
+---
+
+## More Information
+
+For documentation, downloads, FAQ, and updates, visit:
+
+https://buenorc.github.io/pages/interwave.html
+
+
