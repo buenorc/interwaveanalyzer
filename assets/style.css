@@ -1,0 +1,52 @@
+/* ===========================
+   GLOBAL ACCENT COLOR
+   =========================== */
+:root {
+    --accent: #005f99;
+}
+
+/* ===========================
+   DROPDOWN (dcc.Dropdown)
+   =========================== */
+
+/* Selected value box */
+.css-1s2u09g-control {
+    border-color: var(--accent) !important;
+}
+
+/* Focused box */
+.css-1pahdxg-control {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 1px var(--accent) !important;
+}
+
+/* Selected option */
+.css-1n7v3ny-option {
+    background-color: var(--accent) !important;
+    color: white !important;
+}
+
+/* Hover option */
+.css-9gakcf-option {
+    background-color: rgba(0, 95, 153, 0.15) !important;
+}
+
+/* ===========================
+   SLIDER (dcc.Slider)
+   =========================== */
+
+.rc-slider-track {
+    background-color: var(--accent) !important;
+}
+
+.rc-slider-handle {
+    border-color: var(--accent) !important;
+}
+
+/* ===========================
+   ACTIVE TEXT / FOCUS
+   =========================== */
+
+*:focus {
+    outline-color: var(--accent) !important;
+}
