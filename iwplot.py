@@ -1745,6 +1745,241 @@ def schmidt(date, time, y, ax):
     ax.set_xlabel('Time')
 
 
+def energetics(date, heat, schmidt_stability, ax):
+    """
+    Heat content and Schmidt stability of the basin.
+
+    Inputs:
+        date              : list[datetime] – analysis time base
+        heat              : np.ndarray – heat content per surface area (J/m²)
+        schmidt_stability : np.ndarray – Schmidt stability (J/m²)
+        ax                : matplotlib axis
+
+    Notes:
+        The two curves answer different questions and are deliberately drawn
+        together: the heat content measures how much energy the basin holds,
+        the Schmidt stability how much work would be needed to mix it.  A
+        warming period that does not raise the stability indicates that the
+        heat is being mixed downwards rather than accumulating in the surface
+        layer.
+    """
+    heat = np.asarray(heat, dtype=float) / 1.0e6      # MJ/m2
+
+    ax.plot(date, heat, c='firebrick', lw=1.2, label='Heat content')
+    ax.set_ylabel('Heat content (MJ/m²)', color='firebrick', fontsize=9)
+    ax.tick_params(axis='y', labelcolor='firebrick')
+    ax.set_xlim(date[0], date[-1])
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+    ax.tick_params(axis='x', rotation=25)
+
+    ax2 = ax.twinx()
+    ax2.plot(date, schmidt_stability, c='navy', lw=1.2,
+             label='Schmidt stability')
+    ax2.set_ylabel('Schmidt stability (J/m²)', color='navy', fontsize=9)
+    ax2.tick_params(axis='y', labelcolor='navy')
+
+    ax.grid(True, which="both", color='gray', ls=":", lw=0.4)
+
+
+def energy_budget(date, ape, wind_energy, ax):
+    """
+    Available potential energy against the cumulative wind energy input.
+
+    Inputs:
+        date        : list[datetime] – analysis time base
+        ape         : np.ndarray – available potential energy (J)
+        wind_energy : np.ndarray – cumulative wind energy delivered to the
+                      stratified interior (J)
+        ax          : matplotlib axis
+
+    Notes:
+        The available potential energy is the energy stored in the displaced
+        isopycnals; the cumulative wind energy is the supply.  Plotting them
+        on the same axes shows whether the observed internal wave field can be
+        sustained by the observed forcing: a wave field whose APE approaches
+        the cumulative supply is energetically inconsistent and usually points
+        to an underestimated fetch or an incorrect basin area.
+    """
+    ape = np.asarray(ape, dtype=float) / 1.0e6            # MJ
+    wind_energy = np.asarray(wind_energy, dtype=float) / 1.0e6
+
+    ax.plot(date, ape, c='seagreen', lw=1.2,
+            label='Available potential energy')
+    ax.set_ylabel('APE (MJ)', color='seagreen', fontsize=9)
+    ax.tick_params(axis='y', labelcolor='seagreen')
+    ax.set_xlim(date[0], date[-1])
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+    ax.tick_params(axis='x', rotation=25)
+    ax.set_xlabel('Time')
+
+    ax2 = ax.twinx()
+    ax2.plot(date, wind_energy, c='darkorange', lw=1.2,
+             label='Cumulative wind energy')
+    ax2.set_ylabel('Cumulative wind energy (MJ)', color='darkorange',
+                   fontsize=9)
+    ax2.tick_params(axis='y', labelcolor='darkorange')
+
+    ax.grid(True, which="both", color='gray', ls=":", lw=0.4)
+
+
+def hypsography(hypso, longData, transData, ax):
+    """
+    Reconstructed area-depth curve of the basin.
+
+    Inputs:
+        hypso     : iwmod.BasinHypsography – precomputed curve
+        longData  : dict – longitudinal transect
+        transData : dict or None – transverse transect
+        ax        : matplotlib axis
+
+    Notes:
+        The curve is the single geometric quantity that enters the Schmidt
+        stability, the Lake Number and the basin energetics, so it is plotted
+        together with the transect lengths it was built from.  A curve that
+        does not resemble the real basin is the first thing to check when
+        those metrics look implausible.
+    """
+    area = np.asarray(hypso.area, dtype=float) / 1.0e6      # km2
+
+    ax.plot(area, hypso.depth, c='navy', lw=1.4)
+    ax.fill_betweenx(hypso.depth, 0, area, color='navy', alpha=0.12)
+
+    ax.invert_yaxis()
+    ax.set_xlabel('Horizontal area (km²)')
+    ax.set_ylabel('Depth below surface (m)')
+    ax.set_xlim(left=0)
+    ax.grid(True, which="both", color='gray', ls=":", lw=0.4)
+
+    label = 'elliptical section' if transData is not None else 'circular section'
+    ax.set_title(f'Hypsography ({label})', fontsize=9, loc='right')
+
+    ax2 = ax.twiny()
+    ax2.plot(longData["dists"], longData["depths"], c='firebrick', lw=1.0,
+             ls='--', marker='o', ms=3, label='longitudinal')
+    if transData is not None:
+        ax2.plot(transData["dists"], transData["depths"], c='seagreen',
+                 lw=1.0, ls='--', marker='s', ms=3, label='transverse')
+    ax2.set_xlabel('Transect length (m)', fontsize=9)
+    ax2.set_xlim(left=0)
+    ax2.legend(fontsize=7, loc='lower right', frameon=False)
+
+
+def fetch_rose(direction, fetch, ax, n_sectors=36):
+    """
+    Effective fetch as a function of wind direction.
+
+    Inputs:
+        direction : np.ndarray – wind direction (deg, meteorological)
+        fetch     : np.ndarray – effective basin length at that direction (m)
+        ax        : matplotlib axis
+        n_sectors : int – number of direction sectors
+
+    Notes:
+        For a two-transect basin the fetch varies with the wind direction, and
+        the Wedderburn number is proportional to its inverse.  This panel shows
+        which directions actually occurred during the analysed period and how
+        long the basin is along each of them, which makes it immediately
+        visible when the dominant wind blows along the short axis.
+    """
+    direction = np.asarray(direction, dtype=float)
+    fetch = np.asarray(fetch, dtype=float)
+
+    valid = np.isfinite(direction) & np.isfinite(fetch)
+    direction, fetch = direction[valid], fetch[valid]
+
+    if direction.size == 0:
+        ax.text(0.5, 0.5, 'no wind direction available', ha='center',
+                va='center', transform=ax.transAxes, fontsize=9)
+        return
+
+    edges = np.linspace(0.0, 360.0, n_sectors + 1)
+    index = np.clip(np.digitize(direction, edges) - 1, 0, n_sectors - 1)
+
+    centres = 0.5 * (edges[:-1] + edges[1:])
+    mean_fetch = np.full(n_sectors, np.nan)
+    occurrence = np.zeros(n_sectors)
+
+    for s in range(n_sectors):
+        selected = index == s
+        occurrence[s] = np.count_nonzero(selected)
+        if occurrence[s]:
+            mean_fetch[s] = np.mean(fetch[selected])
+
+    occurrence = 100.0 * occurrence / max(1, direction.size)
+
+    ax.bar(centres, occurrence, width=360.0 / n_sectors * 0.9,
+           color='steelblue', alpha=0.6, label='occurrence')
+    ax.set_xlabel('Wind direction (°)')
+    ax.set_ylabel('Occurrence (%)', color='steelblue', fontsize=9)
+    ax.tick_params(axis='y', labelcolor='steelblue')
+    ax.set_xlim(0, 360)
+    ax.set_xticks(np.arange(0, 361, 90))
+
+    ax2 = ax.twinx()
+    ax2.plot(centres, mean_fetch, c='firebrick', lw=1.3, marker='.', ms=4)
+    ax2.set_ylabel('Mean fetch (m)', color='firebrick', fontsize=9)
+    ax2.tick_params(axis='y', labelcolor='firebrick')
+
+    ax.grid(True, which="both", color='gray', ls=":", lw=0.4)
+
+
+def data_coverage(date, temp, wind, direction, level, ax):
+    """
+    Availability of every input variable over the analysis window.
+
+    Inputs:
+        date      : list[datetime] – analysis time base
+        temp      : np.ndarray – temperature field (n_times, n_sensors)
+        wind      : np.ndarray – wind speed on the analysis grid
+        direction : np.ndarray – wind direction on the analysis grid
+        level     : np.ndarray – water-surface elevation
+        ax        : matplotlib axis
+
+    Notes:
+        Every row is one input variable and a gap in the row marks an analysis
+        step for which that variable could not be provided from the input
+        records.  Because the auxiliary records are no longer extended
+        indefinitely by nearest-neighbour search, such gaps are now reported
+        instead of being filled with the closest available value, and this
+        panel is the quickest way to see how much of a result rests on
+        interpolated forcing.
+    """
+    temp = np.asarray(temp, dtype=float)
+
+    rows = []
+    labels = []
+
+    for j in range(temp.shape[1]):
+        rows.append(np.isfinite(temp[:, j]))
+        labels.append(f'T{j + 1}')
+
+    rows.append(np.isfinite(np.asarray(wind, dtype=float)))
+    labels.append('wind speed')
+    rows.append(np.isfinite(np.asarray(direction, dtype=float)))
+    labels.append('wind direction')
+    rows.append(np.isfinite(np.asarray(level, dtype=float)))
+    labels.append('water level')
+
+    matrix = np.asarray(rows, dtype=float)
+
+    ax.imshow(matrix, aspect='auto', interpolation='nearest',
+              cmap=colors.ListedColormap(['indianred', 'lightsteelblue']),
+              vmin=0, vmax=1,
+              extent=[mdates.date2num(date[0]), mdates.date2num(date[-1]),
+                      len(labels) - 0.5, -0.5])
+
+    ax.set_yticks(np.arange(len(labels)))
+    ax.set_yticklabels(labels, fontsize=6)
+    ax.xaxis_date()
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+    ax.tick_params(axis='x', rotation=25)
+    ax.set_xlabel('Time')
+
+    missing = 100.0 * (1.0 - matrix.mean())
+    ax.set_title(f'Input data coverage - {100 - missing:.2f} % available',
+                 fontsize=9, loc='left')
+
+
 def wedderburn(date, t, y, ln, ax):
     """
     Wedderburn number at thermocline depth.
@@ -1920,7 +2155,9 @@ def tempstructure2d(dx, dx_dec, time, h, temp, thermo, cota, z0, hemod, hvmod,
     2D Temperature structure (°C)
     """
 
-    matlab_jet = cm.get_cmap('jet')
+    # cm.get_cmap was removed in Matplotlib 3.9; plt.get_cmap works on every
+    # version.
+    matlab_jet = plt.get_cmap('jet')
 
     temp2d = np.asarray(temp).T   
 
@@ -2021,7 +2258,8 @@ def thorpe_displacement2d(dx, h, thorpe, cota, z0, ax, cbar_n_ticks=4):
     """
     Plot Thorpe discplacement in a 2D pplot.
     """
-    matlab_jet = cm.get_cmap('jet')
+    # see tempstructure2d: cm.get_cmap no longer exists in Matplotlib >= 3.9
+    matlab_jet = plt.get_cmap('jet')
 
     thorpe2d = np.asarray(thorpe).T  # shape: (z, t)
 

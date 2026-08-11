@@ -42,8 +42,27 @@ from scipy.stats.distributions import chi2
 # internal modules
 from   wavelib import wavelet
 
-# supress warnings
-warnings.simplefilter("error")
+# -----------------------------------------------------------------------------
+#  Numerical warning policy
+# -----------------------------------------------------------------------------
+#  Up to version 1.x this module executed ``warnings.simplefilter("error")``,
+#  which promoted *every* warning - including the RuntimeWarnings that NumPy
+#  emits for a division by zero or for the square root of a negative number -
+#  into an exception.  Because those operations are unavoidable when a field
+#  record contains gaps or a momentarily unstable profile, the program was
+#  forced to wrap almost every formula in a try/except block, and a single
+#  benign warning silently diverted the computation to a fallback value.
+#
+#  The policy is now the opposite: the offending operations are allowed to
+#  produce NaN, and NaN is propagated through the NaN-aware reductions used
+#  downstream.  A value that could not be computed therefore appears as a gap
+#  in the results instead of being replaced by an undocumented substitute.
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+np.seterr(divide='ignore', invalid='ignore', over='ignore', under='ignore')
+
+# Gravitational acceleration (m/s2) and reference air density (kg/m3)
+GRAVITY = 9.81
+RHO_AIR = 1.225
 
 
 def basinOrientation(data, orientation_deg):
@@ -623,15 +642,14 @@ def metathick(qt, h, tau, minval, z0):
     """
     error = 0
 
-    # Compute density and gradient 
-    rho = np.array([commission(t) for t in tau], dtype=float)
-    drho_dz = np.zeros(qt-1, dtype=float)
+    # Compute density and gradient (vectorised)
+    tau = np.asarray(tau, dtype=float)[:qt]
+    h = np.asarray(h, dtype=float)[:qt]
 
-    for i in range(qt - 1):
-        dh = h[i+1] - h[i]
-        if dh == 0:
-            dh = 0.01
-        drho_dz[i] = abs((rho[i+1] - rho[i]) / dh)
+    rho = commission(tau)
+    dh = np.diff(h)
+    dh = np.where(dh == 0, 0.01, dh)
+    drho_dz = np.abs(np.diff(rho) / dh)
 
     # Normalize gradient for shape recognition
     grad_norm = drho_dz / (np.max(drho_dz) + 1e-9)
@@ -700,149 +718,343 @@ def thermal_stability(qt, h, H, tau):
     
     Outputs:
         rho  : np.ndarray – water density profile (size qt, kg/m³)
-        n2d  : np.ndarray – Brunt–Väisälä frequency (size qt-1, s⁻²)
+        n2d  : np.ndarray – Brunt–Väisälä frequency N (size qt-1, s⁻¹)
         hmid : np.ndarray – mid-layer depths (size qt-1, m)
         glin : np.ndarray – reduced gravity profile (size qt-1, m/s²)
+
+    Notes:
+        ``n2d`` holds the buoyancy frequency N itself, in rad/s, not its
+        square; the name is retained for backwards compatibility.
+
+        The routine is fully vectorised.  In version 1.x the density was
+        evaluated one sensor at a time and the layer properties in a second
+        Python loop; since the function is called once per time step, that
+        accounted for a substantial share of the total run time for long
+        records.
     """
+    tau = np.asarray(tau, dtype=float)[:qt]
+    h = np.asarray(h, dtype=float)[:qt]
 
-    rho  = np.zeros(qt, dtype=float)
-    n2d  = np.zeros(qt-1, dtype=float)
-    hmid = np.zeros(qt-1, dtype=float)
-    glin = np.zeros(qt-1, dtype=float)
+    rho = commission(tau)
 
-    # Density profile
-    for z in range(qt):
-        rho[z] = commission(tau[z])
+    dh = np.abs(np.diff(h))
+    dh = np.where(dh == 0, 0.01, dh)          # small safety offset
 
-    # Layer properties
-    for z in range(qt-1):
-        dh = abs(h[z+1] - h[z])
-        if dh == 0:
-            dh = 0.01  # small safety offset
-
-        hmid[z] = abs(np.mean([h[z], h[z+1]]))
-        drho = rho[z+1] - rho[z]
-        glin[z] = 9.81 * abs(drho) / rho[z+1]
-        n2d[z] = np.sqrt(glin[z] / dh)
+    hmid = np.abs(0.5 * (h[:-1] + h[1:]))
+    glin = GRAVITY * np.abs(np.diff(rho)) / rho[1:]
+    n2d = np.sqrt(glin / dh)
 
     return rho, n2d, hmid, glin
-    
-def schmidtStability(temp, depths, longData, transData):
+
+
+# =============================================================================
+#  Basin hypsography
+# =============================================================================
+
+class BasinHypsography(object):
     """
-    Compute Schmidt Stability (St) using Interwave basin geometry.
-    
-    The basin horizontal area A(z) is internally reconstructed as:
-        - Circular section (type 1 or 2)
-        - Elliptical section (type 3)
-    
+    Horizontal area of the basin as a function of depth.
+
+    The Interwave Analyzer transect files describe the basin along one or two
+    orthogonal axes.  The horizontal area at a given depth is reconstructed
+    from those lengths by assuming an elliptical cross-section,
+
+        A(z) = pi/4 * L_long(z) * L_trans(z) ,
+
+    which degenerates to a circle, A(z) = pi/4 * L_long(z)^2, when only the
+    longitudinal transect is available.  This is an explicit modelling
+    assumption: it reproduces the correct order of magnitude and, more
+    importantly, the correct *shape* of the area-depth curve, which is what
+    the Schmidt stability and the Lake Number depend on.  Where a measured
+    hypsographic curve exists it should be supplied as the transect file, since
+    A(z) is the only quantity used downstream.
+
     Inputs:
-        temp      : np.ndarray – water temperature profile (°C, size qt)
-        depths    : np.ndarray – depth array corresponding to temp (m, size qt)
-                     Must be increasing positive downward.
-    
-        longData  : dict – longitudinal basin geometry containing:
-                    longData["depths"]      : np.ndarray – depth array (m)
-                    longData["dists"]       : np.ndarray – horizontal distances (m)
-                    longData["refs"]        : np.ndarray – reference coordinates (m)
-                    longData["orientation"] : float – basin orientation (degrees)
-    
-        transData : dict or None – transverse basin geometry
-                    (same structure as longData, if provided)
-    
+        longData : dict - longitudinal transect ("depths", "dists")
+        transData: dict or None - transverse transect
+        dz       : float - vertical resolution of the internal grid (m)
+
+    Attributes:
+        depth  : np.ndarray - internal depth grid (m below the surface)
+        area   : np.ndarray - horizontal area at every grid depth (m2)
+        A0     : float      - surface area (m2)
+        Zcv    : float      - depth of the centre of volume (m)
+        volume : float      - basin volume (m3)
+
+    Notes:
+        Version 1.x rebuilt this grid, interpolated both transects onto it and
+        recomputed the centre of volume *inside the time loop*, once for the
+        Schmidt stability and once again for the Lake Number, although the
+        basin geometry does not change with time.  Precomputing it removes two
+        interpolations and two reductions per time step.
+    """
+
+    def __init__(self, longData, transData=None, dz=0.1):
+        self.dz = float(dz)
+
+        depths = np.asarray(longData["depths"], dtype=float)
+        dists = np.asarray(longData["dists"], dtype=float)
+
+        order = np.argsort(depths)
+        depths, dists = depths[order], dists[order]
+
+        z_min = float(depths[0])
+        z_max = float(depths[-1])
+        if z_max <= z_min:
+            z_max = z_min + self.dz
+
+        self.depth = np.arange(z_min, z_max + self.dz, self.dz)
+
+        L_long = np.interp(self.depth, depths, dists)
+
+        if transData is None:
+            self.area = 0.25 * np.pi * L_long ** 2
+        else:
+            t_depths = np.asarray(transData["depths"], dtype=float)
+            t_dists = np.asarray(transData["dists"], dtype=float)
+            t_order = np.argsort(t_depths)
+            L_trans = np.interp(self.depth, t_depths[t_order],
+                                t_dists[t_order])
+            self.area = 0.25 * np.pi * L_long * L_trans
+
+        self.A0 = float(self.area[0])
+        area_sum = float(np.sum(self.area))
+        self.Zcv = (float(np.sum(self.depth * self.area)) / area_sum
+                    if area_sum > 0 else np.nan)
+        self.volume = area_sum * self.dz
+
+    def interp_temperature(self, temp, depths):
+        """Interpolate a measured profile onto the internal depth grid."""
+        temp = np.asarray(temp, dtype=float)
+        depths = np.asarray(depths, dtype=float)
+
+        finite = np.isfinite(temp) & np.isfinite(depths)
+        if np.count_nonzero(finite) < 2:
+            return np.full(self.depth.size, np.nan)
+
+        order = np.argsort(depths[finite])
+        return np.interp(self.depth, depths[finite][order],
+                         temp[finite][order])
+
+def schmidtStability(temp, depths, hypso):
+    """
+    Schmidt stability of the water column.
+
+    Inputs:
+        temp   : np.ndarray – water temperature profile (°C, size qt)
+        depths : np.ndarray – depth of every sensor below the water surface
+                 (m, size qt), increasing downwards
+        hypso  : BasinHypsography – precomputed area-depth curve
+
     Outputs:
-        St : float – Schmidt Stability (J/m²)
+        St : float – Schmidt stability (J/m²)
+
+    Method:
+        Following Idso (1973),
+
+            St = (g / A0) * integral_0^H (z - z_v) rho(z) A(z) dz ,
+
+        with z_v the depth of the centre of volume and A0 the surface area.
+        St is the work per unit surface area required to mix the water column
+        to a uniform density without any change of heat content, and is
+        therefore the natural measure of the strength of the stratification.
     """
+    rho = commission(hypso.interp_temperature(temp, depths))
 
-    g = 9.81
-    dz = 0.1
+    if not np.any(np.isfinite(rho)) or not np.isfinite(hypso.Zcv) \
+            or hypso.A0 <= 0:
+        return np.nan
 
-    # Create fine vertical grid
-    z_min = depths[0]
-    z_max = depths[-1]
-    layerD = np.arange(z_min, z_max + dz, dz)
+    integrand = (hypso.depth - hypso.Zcv) * rho * hypso.area * hypso.dz
+    return float(GRAVITY / hypso.A0 * np.nansum(integrand))
 
-    # Interpolate temperature
-    temp_interp = np.interp(layerD, depths, temp)
-    rho = commission(temp_interp)
 
-    # Interpolate geometry
-    L_long = np.interp(layerD, longData["depths"], longData["dists"])
-
-    if transData is None:
-        # Circular basin
-        area = np.pi * (L_long / 2) ** 2
-    else:
-        L_trans = np.interp(layerD, transData["depths"], transData["dists"])
-        area = np.pi * (L_long / 2) * (L_trans / 2)
-
-    A0 = area[0]  # surface area
-
-    # Center of volume
-    Zv = layerD * area * dz
-    Zcv = np.sum(Zv) / np.sum(area) / dz
-
-    # Stability integral
-    stability_integrand = -(Zcv - layerD) * rho * area * dz
-    St = g / A0 * np.sum(stability_integrand)
-
-    return St # single float
-
-def lakeNumber(St, uStar, metaT, metaB, rhoHyp, longData, transData):
+def lakeNumber(St, uStar, metaT, metaB, rhoHyp, hypso):
     """
-    Compute Lake Number (Ln) using Interwave basin geometry.
-    
+    Lake Number.
+
     Inputs:
-        St     : float – Schmidt Stability (J m⁻²)
-        uStar  : float – friction velocity at water surface (m s⁻¹)
-        metaT  : float – epilimnion thickness (m)
-        metaB  : float – hypolimnion thickness (m)
-        rhoHyp : float – hypolimnion density (kg m⁻³)
-    
-        longData  : dict – longitudinal basin geometry containing:
-                    longData["depths"]      : np.ndarray – depth array (m)
-                    longData["dists"]       : np.ndarray – horizontal distances (m)
-                    longData["refs"]        : np.ndarray – reference coordinates (m)
-                    longData["orientation"] : float – basin orientation (degrees)
-    
-        transData : dict or None – transverse basin geometry
-                    (used when type_length == 3; if None, basin is treated as circular)
-    
+        St     : float – Schmidt stability (J/m²)
+        uStar  : float – friction velocity at the water surface (m/s)
+        metaT  : float – depth of the top of the metalimnion (m below surface)
+        metaB  : float – depth of the base of the metalimnion (m below surface)
+        rhoHyp : float – mean hypolimnion density (kg/m³)
+        hypso  : BasinHypsography – precomputed area-depth curve
+
     Outputs:
         Ln : float – Lake Number (dimensionless)
+
+    Method:
+        Following Imberger and Patterson (1990), the Lake Number compares the
+        moment of the stabilising density distribution about the centre of
+        volume with the moment of the destabilising wind stress,
+
+            Ln = g * St_v * (z_t + z_b)
+                 / ( 2 rho_h u*^2 A0^(3/2) z_v ) ,
+
+        where St_v = St * A0 / g is the volumetric form of the stability.
+        Ln >> 1 indicates a stratification strong enough to resist the wind;
+        Ln of order 1 marks the onset of upwelling of hypolimnetic water at the
+        upwind end of the basin.
     """
+    if not np.isfinite(St) or not np.isfinite(uStar) or uStar <= 0:
+        return np.nan
+    if hypso.A0 <= 0 or not np.isfinite(hypso.Zcv) or hypso.Zcv <= 0:
+        return np.nan
+    if not np.isfinite(rhoHyp) or rhoHyp <= 0:
+        return np.nan
 
-    g = 9.81
-    dz = 0.1
+    St_volume = St * hypso.A0 / GRAVITY
 
-    # Build fine grid
-    z_min = longData["depths"][0]
-    z_max = longData["depths"][-1]
-    layerD = np.arange(z_min, z_max + dz, dz)
+    return float(GRAVITY * St_volume * (metaT + metaB)
+                 / (2.0 * rhoHyp * uStar ** 2 * hypso.A0 ** 1.5 * hypso.Zcv))
 
-    # Interpolate geometry
-    L_long = np.interp(layerD,
-                       longData["depths"],
-                       longData["dists"])
 
-    if transData is None:
-        area = np.pi * (L_long / 2) ** 2
-    else:
-        L_trans = np.interp(layerD,
-                            transData["depths"],
-                            transData["dists"])
-        area = np.pi * (L_long / 2) * (L_trans / 2)
+def heatContent(temp, depths, hypso, cp=4186.0):
+    """
+    Volumetric heat content of the basin, relative to 0 °C.
 
-    A0 = area[0]
+    Inputs:
+        temp   : np.ndarray – temperature profile (°C)
+        depths : np.ndarray – sensor depths below the surface (m)
+        hypso  : BasinHypsography – area-depth curve
+        cp     : float – specific heat capacity of water (J/kg/K)
 
-    # Center of volume
-    Zv = layerD * area * dz
-    Zcv = np.sum(Zv) / np.sum(area) / dz
+    Outputs:
+        (total, areal)
+            total : float – heat content of the whole basin (J)
+            areal : float – heat content per unit surface area (J/m²)
 
-    St_uC = St * A0 / g
+    Method:
+            Q = cp * integral_0^H rho(z) T(z) A(z) dz .
 
-    Ln = (g * St_uC * (metaT + metaB)/(2 * rhoHyp * uStar**2 * A0**(3/2) * Zcv))
+        The areal form, Q/A0, is the quantity usually plotted, because it is
+        independent of the size of the basin and can be compared directly with
+        the surface heat flux.
+    """
+    profile = hypso.interp_temperature(temp, depths)
+    rho = commission(profile)
 
-    return Ln # float
+    if not np.any(np.isfinite(profile)) or hypso.A0 <= 0:
+        return np.nan, np.nan
+
+    total = float(cp * np.nansum(rho * profile * hypso.area * hypso.dz))
+    return total, total / hypso.A0
+
+
+def basinEnergetics(temp, depths, hypso, cp=4186.0):
+    """
+    Time series of heat content and available potential energy.
+
+    Inputs:
+        temp   : np.ndarray – temperature field, shape (n_times, n_sensors)
+        depths : np.ndarray – depth of every sensor below the water surface,
+                 either shape (n_sensors,) when the water level is constant or
+                 shape (n_times, n_sensors) when it varies (m)
+        hypso  : BasinHypsography – area-depth curve
+        cp     : float – specific heat capacity of water (J/kg/K)
+
+    Outputs:
+        dict with
+
+            heat        : np.ndarray – basin heat content (J)
+            heat_areal  : np.ndarray – heat content per surface area (J/m²)
+            ape         : np.ndarray – available potential energy (J)
+            ape_areal   : np.ndarray – the same per surface area (J/m²)
+            rho_ref     : np.ndarray – reference density profile (kg/m³)
+            depth_grid  : np.ndarray – depth grid of ``rho_ref`` (m)
+
+    Method:
+        The available potential energy of a basin-scale internal wave field is
+        the energy stored in the displacement of the isopycnals away from their
+        rest position.  It is therefore measured against the *time-mean*
+        stratification of the analysed period, which is the natural rest state
+        of the wave field,
+
+            rho_ref(z) = < rho(z, t) >_t ,
+            APE(t) = g * integral_0^H ( rho(z,t) - rho_ref(z) ) z A(z) dz .
+
+        Defining the reference state instead by adiabatically sorting the
+        instantaneous profile - the Lorenz construction - would measure only
+        the static instability of that single profile, which for a stably
+        stratified lake is zero almost everywhere and carries no information
+        about the internal wave field.  The Thorpe scale already reports that
+        instability separately.
+
+        The heat content is the straightforward volume integral
+
+            Q(t) = cp * integral_0^H rho(z,t) T(z,t) A(z) dz ,
+
+        referred to 0 °C.  Its areal form Q/A0 is directly comparable with a
+        surface heat flux in W/m².
+    """
+    temp = np.asarray(temp, dtype=float)
+    depths = np.asarray(depths, dtype=float)
+
+    n_times = temp.shape[0]
+    constant_depth = depths.ndim == 1
+
+    grid = hypso.depth
+    volume = hypso.area * hypso.dz
+
+    profiles = np.empty((n_times, grid.size), dtype=float)
+    for t in range(n_times):
+        profiles[t] = hypso.interp_temperature(
+            temp[t], depths if constant_depth else depths[t])
+
+    rho = commission(profiles)
+
+    heat = cp * np.nansum(rho * profiles * volume[None, :], axis=1)
+
+    rho_ref = np.nanmean(rho, axis=0)
+    ape = GRAVITY * np.nansum((rho - rho_ref[None, :])
+                              * grid[None, :] * volume[None, :], axis=1)
+
+    area = hypso.A0 if hypso.A0 > 0 else np.nan
+
+    return {'heat': heat, 'heat_areal': heat / area,
+            'ape': np.abs(ape), 'ape_areal': np.abs(ape) / area,
+            'rho_ref': rho_ref, 'depth_grid': grid}
+
+
+def windWork(stress, speed, area, dt_seconds, efficiency=0.0016):
+    """
+    Cumulative wind energy delivered to the basin.
+
+    Inputs:
+        stress     : np.ndarray – surface wind stress (N/m²)
+        speed      : np.ndarray – wind speed at 10 m (m/s)
+        area       : float      – surface area of the basin (m²)
+        dt_seconds : float      – analysis time step (s)
+        efficiency : float      – fraction of the wind power that reaches the
+                     stratified interior
+
+    Outputs:
+        (power, cumulative)
+            power      : np.ndarray – instantaneous power available to the
+                         stratification (W)
+            cumulative : np.ndarray – time integral of that power (J)
+
+    Method:
+        The rate at which the wind does work on the water surface is
+
+            P = A * tau * U10 ,
+
+        of which only a small fraction reaches the interior; the remainder is
+        dissipated in the surface layer.  The default efficiency of 0.0016
+        follows the value commonly adopted for the mixing efficiency of wind
+        energy in lakes.  The cumulative form is the quantity to compare with
+        the available potential energy, so that the two together indicate
+        whether the observed internal wave field can be sustained by the
+        observed forcing.
+    """
+    stress = np.asarray(stress, dtype=float)
+    speed = np.asarray(speed, dtype=float)
+
+    power = efficiency * area * stress * np.abs(speed)
+    cumulative = np.nancumsum(np.nan_to_num(power) * dt_seconds)
+
+    return power, cumulative
 
 def density_2layer(qt, h, tau, H, z0, last_cache=None):
     """
@@ -901,7 +1113,7 @@ def density_3layer(qt, h, tau, minval, H, z0):
         error      : int – 0 if consistent, else 1
     """
     ze, zh, error = metathick(qt, h, tau, minval, z0)
-    rho = np.array([commission(t) for t in tau], dtype=float)
+    rho = commission(np.asarray(tau, dtype=float))
 
     try:
         # Ensure monotonic depths
@@ -1035,11 +1247,18 @@ def wedderburn(glin, he, wast, ls):
         ls   : float – characteristic fetch length (m)
 
     Outputs:
-        wedd : float or None – Wedderburn number (dimensionless)
+        wedd : float – Wedderburn number (dimensionless), NaN when undefined
+
+    Notes:
+        Version 1.x returned ``None`` for a degenerate input.  Assigning
+        ``None`` into the float array that collects the result raises a
+        ``TypeError`` in NumPy, so the analysis aborted on the first calm or
+        unstratified time step.  ``NaN`` is returned instead, which the
+        NaN-aware statistics downstream handle correctly.
     """
-    # Avoid division by zero or meaningless values
-    if any(v <= 0 for v in (glin, wast, he, ls)):
-        return None
+    values = (glin, wast, he, ls)
+    if not all(np.isfinite(v) for v in values) or any(v <= 0 for v in values):
+        return np.nan
 
     return glin * he**2 / (ls * wast**2)
 
@@ -1148,6 +1367,13 @@ def RedConf(datax, dt, nsim, nperseg):
         wr, tabtchi : np.ndarray – frequencies and confidence levels
     """
     rho = rhoAR1(datax)
+    
+    # w, Pxx = signal.welch(datax, fs=1/dt, nperseg=nperseg)
+    # Ax = np.nanmean(Pxx)
+    # npr = len(w)
+    # tabtchi = conflevel(Ax, npr, dt, rho, w, nfft, nperseg)
+    
+    
     nt = len(datax)
     redtab = Rednoise(nt, rho, nsim)
 
@@ -1159,6 +1385,7 @@ def RedConf(datax, dt, nsim, nperseg):
     wr, _ = signal.welch(redtab[:, 0] - np.nanmean(redtab[:, 0]), fs=1 / dt, nperseg=nperseg)
     npr = len(wr)
     tabtchi = conflevel(Ax, npr, dt, rho, wr, nfft, nperseg)
+    
     return wr, tabtchi
     
 
@@ -1249,15 +1476,28 @@ def velocityten(wz, z):
 
     Outputs:
         w10 : np.ndarray – wind velocity scaled to 10 m (m/s)
+
+    Method:
+        Neutral logarithmic profile,
+
+            U10 = Uz / ( 1 - sqrt(C_D)/kappa * ln(10/z) ) ,
+
+        with kappa = 0.4.  The drag coefficient follows the law selected by
+        :func:`drag_coefficient`, so the correction is continuous in wind
+        speed; version 1.x used the discontinuous step law here as well.
     """
     if z == 10:
-        return wz
+        return np.asarray(wz, dtype=float)
 
     wz = np.asarray(wz, dtype=float)
-    k = 0.4  # von Kármán constant
-    exp = math.log(10 / z)
-    Cd = np.where(wz < 5, 0.0010, 0.0015)
-    return wz / (1 - np.sqrt(Cd) / k * exp)
+    kappa = 0.4
+    offset = math.log(10.0 / z)
+
+    Cd = drag_coefficient(wz)
+    denominator = 1.0 - np.sqrt(Cd) / kappa * offset
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        return np.where(np.abs(denominator) > 1e-6, wz / denominator, wz)
 
 
 def wind_average(wd, iw):
@@ -1323,20 +1563,73 @@ def wind_angle(wind, linang):
     return dw_min, dw_max
 
 
-def wind_stress(w):
+#  Selected drag law; set once by the backend from the additional parameters
+DRAG_LAW = 'smooth'
+
+
+def drag_coefficient(w, law=None):
     """
-    Compute wind stress (N/m² or Pa).
+    Neutral drag coefficient of the water surface at 10 m.
 
     Inputs:
-        w : float – wind velocity (m/s)
+        w   : float or np.ndarray – wind speed at 10 m (m/s)
+        law : str or None – 'smooth' (default), 'legacy' or 'largepond'
 
     Outputs:
-        stress : float – wind stress (N/m²)
+        float or np.ndarray – drag coefficient C_D10 (dimensionless)
+
+    Method:
+        'legacy'    reproduces version 1.x exactly: C_D = 1.0e-3 below 5 m/s
+                    and 1.5e-3 above.  That step makes the surface stress jump
+                    by 50 % as the wind crosses 5 m/s, and the jump propagates
+                    into the friction velocity, the Richardson number, the
+                    Wedderburn number and every classification derived from
+                    them, producing steps in the time series that have no
+                    physical counterpart.
+
+        'smooth'    keeps the same two end values but joins them linearly
+                    between 4 and 6 m/s,
+
+                        C_D = 1.0e-3                       U <= 4
+                        C_D = 1.0e-3 + 0.25e-3 (U - 4)     4 < U < 6
+                        C_D = 1.5e-3                       U >= 6 ,
+
+                    so the stress is continuous while the calibration of the
+                    original formulation is preserved.  This is the default.
+
+        'largepond' applies Large and Pond (1981),
+
+                        C_D = 1.2e-3                       U <= 11
+                        C_D = (0.49 + 0.065 U) 1e-3        U > 11 ,
+
+                    which is the standard open-water parametrisation and is
+                    preferable for large basins exposed to strong winds.
     """
-    w = max(w, 0.01)  # avoid zero for stability
-    Cd = 0.0015 if w > 5 else 0.0010
-    rho_air = 1.225  # air density (kg/m³)
-    return Cd * rho_air * w**2
+    law = (law or DRAG_LAW).lower()
+    w = np.abs(np.asarray(w, dtype=float))
+
+    if law == 'legacy':
+        return np.where(w > 5.0, 0.0015, 0.0010)
+
+    if law == 'largepond':
+        return np.where(w <= 11.0, 0.0012, (0.49 + 0.065 * w) * 1.0e-3)
+
+    return np.clip(1.0e-3 + 0.25e-3 * (w - 4.0), 1.0e-3, 1.5e-3)
+
+
+def wind_stress(w, law=None):
+    """
+    Surface wind stress.
+
+    Inputs:
+        w   : float or np.ndarray – wind speed at 10 m (m/s)
+        law : str or None – drag law, see :func:`drag_coefficient`
+
+    Outputs:
+        float or np.ndarray – wind stress tau = rho_air C_D U^2 (N/m²)
+    """
+    w = np.maximum(np.abs(np.asarray(w, dtype=float)), 0.01)
+    return drag_coefficient(w, law) * RHO_AIR * w ** 2
 
 def wind_parameters(w, rw, pe, he, n, glin, H):
     """
@@ -1353,12 +1646,17 @@ def wind_parameters(w, rw, pe, he, n, glin, H):
 
     Outputs:
         stress : float – wind stress (N/m²)
-        wast   : float – friction velocity (m/s)
-        riw    : float – bulk Richardson number
+        wast   : float – friction velocity in the water (m/s)
+        riw    : float – bulk Richardson number of the surface layer
     """
-    stress = wind_stress(w)
+    stress = float(wind_stress(w))
+
+    if not np.isfinite(pe) or pe <= 0:
+        return stress, np.nan, np.nan
+
     wast = math.sqrt(stress / pe)
-    riw = glin * he / (wast**2) if wast != 0 else np.nan
+    riw = glin * he / (wast ** 2) if wast > 0 else np.nan
+
     return stress, wast, riw
 
 def richardson(w, rw, qt, h, pe, H, n2d, hmid, p, glin):
@@ -1379,12 +1677,23 @@ def richardson(w, rw, qt, h, pe, H, n2d, hmid, p, glin):
 
     Outputs:
         riw2d : np.ndarray – Richardson number profile (along z-direction)
+
+    Notes:
+        The friction velocity is referenced to the mean density of each layer
+        pair, and the length scale is the distance of the layer below the water
+        surface, so that ``riw2d`` is the bulk Richardson number that would be
+        obtained by treating every measurement level in turn as the base of the
+        wind-mixed layer.
     """
-    win_stress = wind_stress(w)
-    rho_mean = np.abs(np.mean(np.column_stack((p[:-1], p[1:])), axis=1))
+    win_stress = float(wind_stress(w))
+
+    rho_mean = np.abs(0.5 * (p[:-1] + p[1:]))
     wast = np.sqrt(win_stress / rho_mean)
-    riw2d = glin[:qt - 1] * (H - hmid[:qt - 1]) / (wast**2)
-    return riw2d  
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        riw2d = glin[:qt - 1] * (H - hmid[:qt - 1]) / (wast ** 2)
+
+    return riw2d
 
 
 def sorting_2d(data):

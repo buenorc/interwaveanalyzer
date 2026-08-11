@@ -185,13 +185,15 @@ g = 9.81
 
 
 if getattr(sys, 'frozen', False):
-    base_path = os.path.dirname(sys.executable)
+    # one-file builds unpack the bundled assets into a temporary folder
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
 else:
     base_path = os.path.dirname(os.path.abspath(__file__))
 
 assets_path = os.path.join(base_path, "assets")
 
-app = dash.Dash(__name__, suppress_callback_exceptions=True)
+app = dash.Dash(__name__, assets_folder=assets_path,
+                suppress_callback_exceptions=True)
 
 # --------- Figures - Basin characteristcs ------------------------------------
 

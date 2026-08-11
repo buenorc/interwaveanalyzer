@@ -50,9 +50,10 @@ from matplotlib import pyplot as plt
 import iwplot as graph  # package of graphs
 import iwmod  as mod    # package of functions
 import iwmath as miw    # package of internal wave models
-import iwload as load   # package of inputs 
+import iwload as load   # package of inputs
 import iwarn  as war    # package of warnings
 import iwpars as pars   # package of addition parameters
+import iwtime as tmb    # time base and resampling operators
 
 
 # --------------------- Tk Text widget ----------------------------------------
@@ -160,9 +161,16 @@ def main():
 
 
 
-    # Decomposition
+    # Decomposition.  The GUI writes -999 when the user did not set a
+    # resolution.  The sentinel has to be recognised *before* the conversion to
+    # hours, otherwise it becomes -16.65 and never matches the test further
+    # down, which made the program report "resolution adjusted to match data"
+    # instead of "applied at each time step".
     dt_decom = float(next(it))
-    dt_decom = dt_decom / 60.0  # convert minutes to hours
+    if dt_decom == -999:
+        dt_decom = -999
+    else:
+        dt_decom = dt_decom / 60.0  # convert minutes to hours
 
     # Spectral analysis
     window = next(it)
@@ -248,41 +256,96 @@ def main():
     print("> Part II      Loading information from files... ")
     root.update()
 
-    lin, qt = load.file_len(nam, col='on')
+    # ---- analysis-window and resampling options (additional parameters) -----
+    window_options = pars.extractTimeOptions(additional_params)
+    mod.DRAG_LAW = pars.extractDragLaw(additional_params)
 
-    date, temp, serialt, dt = load.temper_read(nam, lin, qt)
-    ean, h, tempa = load.serial_cota(serialt, nac, lin, qt, temp, sen_nam, ean_serie, ean_cota, z0)
-    wind, dw, ra = load.serial_wind(serialt, win, rad, lin)
-    
+    try:
+        dataset = load.build_dataset(
+            temp_path=nam, meteo_path=win, sensor_path=sen_nam,
+            level_path=nac if ean_serie == 2 else None,
+            radiation=rad, level_mode=ean_serie, level_value=ean_cota,
+            z0=z0, options=window_options)
+    except IOError as error:
+        dig.write(f"[ERROR] {error}\n")
+        dig.close()
+        print("> ")
+        print(f"> ERROR while reading the input files: {error}")
+        print("> Analysis aborted. See diagnosis.txt in the output folder.")
+        root.update()
+        sys.stdout = old_stdout
+        root.mainloop()
+        return
+
+    # Record every loading diagnostic in the diagnosis file
+    dig.write("Input files and time base\n")
+    dig.write("-------------------------------------------------------------"
+              "------------------------\n")
+    for message in dataset['messages']:
+        dig.write(f"[INFO] {message}\n")
+    dig.write("\n")
+
+    # ---- unpack onto the names used throughout the backend ------------------
+    epoch = dataset['epoch']
+    dx = dataset['datetime']
+    date = [d.strftime('%Y/%m/%d/%H/%M') for d in dx]
+
+    # Two consistent views of the thermistor chain are kept:
+    #   temp / h_sensor  - in the column order of the input file, used whenever
+    #                      the user refers to "sensor n";
+    #   tempa / h        - sorted from the surface downwards, used for every
+    #                      profile computation.
+    # In version 1.x the "sorted" array was an alias of the raw one, so the two
+    # views were silently the same object and a sensor file written in any
+    # order other than surface-to-bed produced profiles in which temperature
+    # and depth did not correspond.
+    temp = dataset['temp']              # raw profile, sensor order of the file
+    tempa = dataset['temp_sorted']      # profile sorted surface -> bed
+    h = dataset['height']               # sensor height above datum, sorted
+    h_sensor = dataset['height_raw']    # sensor height above datum, file order
+    ean = dataset['level']              # water-surface elevation
+    wind = dataset['wind']              # arithmetic mean wind speed
+    wind_stress_speed = dataset['wind_stress_speed']   # stress-equivalent
+    dw = dataset['direction']
+    ra = dataset['radiation']
+
+    dt = dataset['dt']                  # hours
+    dt_seconds = dataset['dt_seconds']
+    lin = int(epoch.size)
+    qt = int(dataset['n_sensors'])
+    quality = dataset['quality']
+
+    if rad == 1 and not dataset['has_radiation']:
+        rad = 0
+
     seu = seu - 1
-    
+
     type_length, fna, fna_trans, change_basin, warnTrans, missFile = \
         load.lengthType(type_length, fna, additional_params)
 
     if warnTrans:
         war.bathyMissing(dig, missFile)
-    
+
     # Load geometry
     auxDepth = ean - z0
-    longData, transData = load.loadData(type_length, fna, fna_trans, len_basin, change_basin, np.mean(auxDepth))
-    
-    # Apply orientation 
+    longData, transData = load.loadData(type_length, fna, fna_trans, len_basin,
+                                        change_basin, np.mean(auxDepth))
+
+    # Apply orientation
     if type_length == 3:
         longData = mod.basinOrientation(longData, change_basin)
         transData = mod.basinOrientation(transData, (change_basin + 90) % 360)
-    
-    elif type_length == 2:
+    else:
         longData = mod.basinOrientation(longData, 270)
-    
-    elif type_length == 1:
-        longData =mod.basinOrientation(longData, 270)
-    
+
+    # Area-depth curve: constant in time, therefore built once
+    hypso = mod.BasinHypsography(longData, transData)
 
     print("> Part III     Defining constants and creating variables... ")
     root.update()
-    
+
     # ------------- Organizing Additional Parameters --------------------------
-    
+
     nameBasin = pars.extractName(additional_params)
 
     # ---- Defining parameters and constants + creating diagnosis file --------
@@ -317,78 +380,78 @@ def main():
     Ndeco = int(dt_decom / dt)
 
     # General parameters
-    ls_fetch = np.empty(lin, float)
+    ls_fetch = np.full(lin, np.nan)
     
-    glin = np.empty(lin, float)
-    wast = np.empty(lin, float)
-    strs = np.empty(lin, float)
+    glin = np.full(lin, np.nan)
+    wast = np.full(lin, np.nan)
+    strs = np.full(lin, np.nan)
 
-    n          = np.empty(lin, float)
-    schmidt    = np.empty(lin, float) 
-    lakeNumber = np.empty(lin, float) 
-    riw        = np.empty(lin, float)
-    wedd       = np.empty(lin, float)
-    wedd_inv   = np.empty(lin, float)
+    n          = np.full(lin, np.nan)
+    schmidt    = np.full(lin, np.nan) 
+    lakeNumber = np.full(lin, np.nan) 
+    riw        = np.full(lin, np.nan)
+    wedd       = np.full(lin, np.nan)
+    wedd_inv   = np.full(lin, np.nan)
 
-    thermo_temp = np.empty(lin, float)
+    thermo_temp = np.full(lin, np.nan)
 
-    n_slope      = np.empty(lin, float)
-    wave_slope   = np.empty(lin, float)
-    longLeft     = np.empty(lin, float)
-    longRight    = np.empty(lin, float)
-    atLeft       = np.empty(lin, float)
-    atRight      = np.empty(lin, float)
-    transLeft    = np.empty(lin, float)
-    transRight   = np.empty(lin, float)
-    atcrossLeft  = np.empty(lin, float)
-    atcrossRight = np.empty(lin, float)
+    n_slope      = np.full(lin, np.nan)
+    wave_slope   = np.full(lin, np.nan)
+    longLeft     = np.full(lin, np.nan)
+    longRight    = np.full(lin, np.nan)
+    atLeft       = np.full(lin, np.nan)
+    atRight      = np.full(lin, np.nan)
+    transLeft    = np.full(lin, np.nan)
+    transRight   = np.full(lin, np.nan)
+    atcrossLeft  = np.full(lin, np.nan)
+    atcrossRight = np.full(lin, np.nan)
     
-    ht = np.empty(lin, float)
-    he = np.empty(lin, float)
-    hh = np.empty(lin, float)
-    pe = np.empty(lin, float)
-    ph = np.empty(lin, float)
+    ht = np.full(lin, np.nan)
+    he = np.full(lin, np.nan)
+    hh = np.full(lin, np.nan)
+    pe = np.full(lin, np.nan)
+    ph = np.full(lin, np.nan)
     
-    cond1 = np.empty(lin, float)
-    cond2 = np.empty(lin, float)
-    cond3 = np.empty(lin, float)
+    cond1 = np.full(lin, np.nan)
+    cond2 = np.full(lin, np.nan)
+    cond3 = np.full(lin, np.nan)
 
-    Pbar = np.empty(lin, float)
-    Hbar = np.empty(lin, float)
+    Pbar = np.full(lin, np.nan)
+    Hbar = np.full(lin, np.nan)
 
-    v1mode = np.empty(lin, float)
-    v2mode = np.empty(lin, float)
+    v1mode = np.full(lin, np.nan)
+    v2mode = np.full(lin, np.nan)
 
-    h1 = np.empty(lin, float)
-    h2 = np.empty(lin, float)
-    h3 = np.empty(lin, float)
-    p1 = np.empty(lin, float)
-    p2 = np.empty(lin, float)
-    p3 = np.empty(lin, float)
+    h1 = np.full(lin, np.nan)
+    h2 = np.full(lin, np.nan)
+    h3 = np.full(lin, np.nan)
+    p1 = np.full(lin, np.nan)
+    p2 = np.full(lin, np.nan)
+    p3 = np.full(lin, np.nan)
 
-    pu = np.empty(lin, float)
-    pd = np.empty(lin, float)
-    hH = np.empty(lin, float)
+    pu = np.full(lin, np.nan)
+    pd = np.full(lin, np.nan)
+    hH = np.full(lin, np.nan)
 
-    isoa = np.empty(lin, float)
-    isob = np.empty(lin, float)
-    isoc = np.empty(lin, float)
-    isod = np.empty(lin, float)
+    isoa = np.full(lin, np.nan)
+    isob = np.full(lin, np.nan)
+    isoc = np.full(lin, np.nan)
+    isod = np.full(lin, np.nan)
 
-    genera = np.empty(lin, float)
-    iw_up = np.empty(lin, float)
-    iw_dw = np.empty(lin, float)
+    genera = np.full(lin, np.nan)
+    iw_up = np.full(lin, np.nan)
+    iw_dw = np.full(lin, np.nan)
 
     # Two-dim parameters: shape (lin, qt-1)
-    riw2d = np.empty((lin, qt - 1), float)
-    hzmid = np.empty((lin, qt - 1), float)
+    riw2d = np.full((lin, qt - 1), np.nan)
+    hzmid = np.full((lin, qt - 1), np.nan)
 
-    dw_hom = np.empty(lin, float)
-    dw_lit = np.empty(lin, float)
-    dw_spi = np.empty(lin, float)
+    dw_hom = np.full(lin, np.nan)
+    dw_lit = np.full(lin, np.nan)
+    dw_spi = np.full(lin, np.nan)
 
-    wedu = np.empty(lin, float)
-    wedi = np.empty(lin, float)
+    wedu = np.full(lin, np.nan)
+    wedi = np.full(lin, np.nan)
 
     # Initialize values that were previously assigned None in loop
     isoa.fill(np.nan)
@@ -411,8 +474,21 @@ def main():
     
     root.update()
 
-    iw       = mod.velocityten(wind, rw)
-    hmean    = np.mean(h, axis=0)
+    # Wind speed referred to 10 m.  Two versions are carried:
+    #   iw      - arithmetic mean speed, used for the spectra and the reports,
+    #             because the spectral analysis must see the linear signal;
+    #   iw_tau  - stress-equivalent speed sqrt(<U^2>), used wherever the
+    #             surface stress enters (stress, friction velocity, Richardson
+    #             and Wedderburn numbers).  When the meteorological record is
+    #             sampled faster than the analysis grid these differ, and using
+    #             the arithmetic mean there would systematically underestimate
+    #             the momentum actually delivered to the basin.
+    iw = mod.velocityten(wind, rw)
+    iw_tau = mod.velocityten(wind_stress_speed, rw)
+
+    # Mean height of every sensor in the column order of the input file: the
+    # per-sensor spectra are indexed that way.
+    hmean = np.nanmean(h_sensor, axis=0)
 
     print("--------------------------------------------------------------------------------------")
     print('> ')
@@ -439,14 +515,23 @@ def main():
 
     auxisa = auxisb   = auxisc   = auxisd    = None
     war3   = warmode1 = warmode2 = war3from2 = 0
+    merian_failed = 0
 
-    nanmax = np.nanmax
+    # The decomposition model is evaluated every Ndeco steps and its result is
+    # carried forward in between.  Both carriers are initialised here so that
+    # they are always defined, instead of leaking out of the first iteration of
+    # the loop as they did in version 1.x.
+    period_aux = [np.nan] * miw.N_MODES
+    cross = {i: [np.nan] * (i + 1) for i in range(4)}
 
+    # Merian period at every step, kept as an array rather than as the value
+    # left over by the last iteration
+    tbsiw_series = np.full(lin, np.nan)
 
     # Progress reporting parameters
     progress_every = max(1, int(lin / 100))  # update roughly every 1%
     dt_sec = dt * 3600.0                     # seconds per dt
-    
+
     he_t_lasts = {}
     
     hemod           = []
@@ -480,9 +565,10 @@ def main():
         # Local references to arrays and row slices
         auxtem = tempa[t, :]
         auxh = h[t, :]
-        auxiw = iw[t]
+        auxiw = iw[t]              # mean speed, for reporting
+        auxiw_tau = iw_tau[t]      # stress-equivalent speed, for the forcing
         auxean = ean[t]
-        max_ean = nanmax(auxean)
+        max_ean = auxean
         min_ean = z0
 
         auxtem_ordered = mod.sorting_1d(auxtem)
@@ -531,8 +617,15 @@ def main():
 
         n_slope[t] = np.sqrt(9.81*abs(rho_bot-rho_up)/(rho_up*Htotal))
         wave_slope[t] = mod.waveSlope(n_slope[t], period_aux[0])
-        
-        slopes_t = mod.thermoclineSlopes(type_length, longData, transData, auxean, cross[0][0], z0)
+
+        # Depth of the mode-1 node; falls back to the mid water column when the
+        # decomposition could not resolve it
+        node1 = cross[0][0]
+        if not np.isfinite(node1):
+            node1 = 0.5 * (auxean + z0)
+
+        slopes_t = mod.thermoclineSlopes(type_length, longData, transData,
+                                         auxean, node1, z0)
 
         longLeft[t]  = slopes_t["long"]["left"]
         longRight[t] = slopes_t["long"]["right"]
@@ -583,7 +676,9 @@ def main():
         if hH[t] > 0.5:
             hH[t] = 1.0 - hH[t]
 
-        strs[t], wast[t], riw[t] = mod.wind_parameters(auxiw, rw, pe_t, he_t, n_t, glin_t, auxean)
+        strs[t], wast[t], riw[t] = mod.wind_parameters(auxiw_tau, rw, pe_t,
+                                                       he_t, n_t, glin_t,
+                                                       auxean)
 
         # Store two-layer results
         pe[t] = pe_t
@@ -595,24 +690,27 @@ def main():
 
         # 2d parameters
         p, n2, hmid, gli2d = mod.thermal_stability(qt, auxh, auxean, auxtem)
-        riw2 = mod.richardson(auxiw, rw, qt, auxh, pe_t, auxean, n2, hmid, p, gli2d)
-        
+        riw2 = mod.richardson(auxiw_tau, rw, qt, auxh, pe_t, auxean, n2, hmid,
+                              p, gli2d)
+
         buoy.append(n2)
-        
 
         riw2d[t, :] = riw2[:]
         hzmid[t, :] = hmid[:]
 
         # Wedderburn number
         wedd[t] = mod.wedderburn(glin_t, he_t, wast[t], ls_fetch[t])
-        wedd_inv[t] = 1.0 / wedd[t] if wedd[t] != 0 else np.nan
+        wedd_inv[t] = 1.0 / wedd[t] if (np.isfinite(wedd[t])
+                                        and wedd[t] != 0) else np.nan
 
-        # Wind parametrization
-        try:
-            tbsiw = 2.0 * ls_fetch[t] / np.sqrt(glin_t * he_t * hh_t / (he_t + hh_t))
-        except Exception:
-            tbsiw = np.nan
-            war.merian(dig)
+        # Merian period of the fundamental basin-scale internal seiche
+        denominator = glin_t * he_t * hh_t / (he_t + hh_t) \
+            if (he_t + hh_t) > 0 else np.nan
+        tbsiw = (2.0 * ls_fetch[t] / np.sqrt(denominator)
+                 if np.isfinite(denominator) and denominator > 0 else np.nan)
+        if not np.isfinite(tbsiw):
+            merian_failed += 1
+        tbsiw_series[t] = tbsiw
 
         dw_hom[t] = np.nan
 
@@ -720,11 +818,14 @@ def main():
         genera[t],cond1[t], cond2[t], cond3[t] = mod.class_generation(riw[t], hh_t, he_t, ls_fetch[t])
         iw_dw[t], iw_up[t] = mod.iw_generation(wedd[t], hh_t, he_t, ls_fetch[t])
 
-        # Schmidt Stability (J/m2)
-        depthSensor = auxean-auxh
-        schmidt[t] = mod.schmidtStability(auxtem_ordered,depthSensor , longData, transData)
-        lakeNumber[t] = mod.lakeNumber(schmidt[t], wast[t], h1[t], h1[t]+h2[t], ph[t], longData, transData)    
-    
+        # Schmidt stability (J/m2) and Lake Number.  The area-depth curve is
+        # precomputed outside the loop, so neither call rebuilds the vertical
+        # grid or re-interpolates the transects any more.
+        depthSensor = auxean - auxh
+        schmidt[t] = mod.schmidtStability(auxtem_ordered, depthSensor, hypso)
+        lakeNumber[t] = mod.lakeNumber(schmidt[t], wast[t], h1[t],
+                                       h1[t] + h2[t], ph[t], hypso)
+
 
         try:
             _, v1mode_t, _ = np.real(miw.disp_zmodel(pe_t, ph_t, he_t, hh_t, ls_fetch[t], 1))
@@ -767,19 +868,22 @@ def main():
     if warmode1 > 0:
         war.profile_structure(dig, 1, 100.0 * warmode1 / lin)
     if warmode2 > 0:
-        war.profile_structure(dig, 2, 100.0 * warmode1 / lin)  # original used warmode1 in denominator
+        war.profile_structure(dig, 2, 100.0 * warmode2 / lin)
     if war3 > 0:
         war.metalimnion(dig, 100.0 * war3 / lin)
     if war3from2 > 0:
         war.threetotwo(dig, 100.0 * war3from2 / lin)
     if error_thermo > 0:
         war.thermocline(dig, 100.0 * error_thermo / lin)
+    if merian_failed > 0:
+        war.merian(dig)
 
     iso = [isoa, isob, isoc, isod]
 
-    # Date formatting
-    dx_mod = [datetime.datetime.strptime(d, '%Y/%m/%d/%H/%M') for d in date_model]
-    dx = [datetime.datetime.strptime(d, '%Y/%m/%d/%H/%M') for d in date]
+    # Date formatting.  ``dx`` already comes from the loader as real datetimes;
+    # only the decomposition sub-sampling still has to be converted.
+    dx_mod = [datetime.datetime.strptime(d, '%Y/%m/%d/%H/%M')
+              for d in date_model]
 
 
     # Convert lists to arrays
@@ -807,10 +911,18 @@ def main():
     T41  = mod.period_analysis(period_time[:,3]*3600)
     
 
-    # Splitting analyzed period into three groups
-    group = [genera[i:i + int(lin / 3)] for i in range(0, len(genera), int(lin / 3))]
-    hH_gp = [hH[i:i + int(lin / 3)] for i in range(0, len(hH), int(lin / 3))]
-    wi_gp = [wedd_inv[i:i + int(lin / 3)] for i in range(0, len(wedd_inv), int(lin / 3))]
+    # Splitting the analysed period into three groups of equal length.
+    # Slicing with ``int(lin/3)`` produced a spurious fourth group whenever the
+    # record length was not a multiple of three, and that remainder group -
+    # sometimes a single sample - was silently discarded from the figures while
+    # still shifting the boundaries of the three reported sub-periods.
+    split_at = [len(a) for a in np.array_split(np.arange(lin), 3)]
+    bounds = np.cumsum([0] + split_at)
+
+    group = [genera[bounds[i]:bounds[i + 1]] for i in range(3)]
+    hH_gp = [hH[bounds[i]:bounds[i + 1]] for i in range(3)]
+    wi_gp = [wedd_inv[bounds[i]:bounds[i + 1]] for i in range(3)]
+    dx_gp = [dx[bounds[i]:bounds[i + 1]] for i in range(3)]
 
     h_lim1 = mod.ci(hH_gp[0])
     W_lim1 = mod.ci(wi_gp[0])
@@ -819,9 +931,6 @@ def main():
     h_lim3 = mod.ci(hH_gp[2])
     W_lim3 = mod.ci(wi_gp[2])
 
-
-    dx_gp = [dx[i:i + int(lin / 3)] for i in range(0, len(dx), int(lin / 3))]
-
     P1 = [dx_gp[0][0], dx_gp[0][-1]]
     P2 = [dx_gp[1][0], dx_gp[1][-1]]
     P3 = [dx_gp[2][0], dx_gp[2][-1]]
@@ -829,8 +938,20 @@ def main():
     mean_temp, low_temp, high_temp, low_temp_sd, high_temp_sd = mod.stad_deviation(tempa)
     mean_buoy, low_buoy, high_buoy, low_buoy_sd, high_buoy_sd = mod.stad_deviation(buoy)
 
-    mean_h  = np.mean(h, axis=0)
-    mean_hm = np.mean(hzmid, axis=0)
+    mean_h  = np.nanmean(h, axis=0)
+    mean_hm = np.nanmean(hzmid, axis=0)
+
+    # ---- basin energetics (vectorised over the whole record) ----------------
+    depth_sensor_matrix = ean[:, None] - h
+    energetics = mod.basinEnergetics(tempa, depth_sensor_matrix, hypso)
+
+    heat_content = energetics['heat_areal']
+    ape = energetics['ape']
+    ape_areal = energetics['ape_areal']
+
+    wind_power, wind_energy = mod.windWork(
+        strs, iw, hypso.A0, dt_seconds,
+        efficiency=pars.extractMixingEfficiency(additional_params))
     
 
     m_pe = np.nanmean(pe)
@@ -878,16 +999,22 @@ def main():
     print(">         Parameters were defined")
     root.update()
 
-    # Correction of parameters according to wind filtering
+    # Correction of parameters according to wind filtering.
+    # The reference Merian period is the median over the whole record; version
+    # 1.x used whatever value happened to be left in ``tbsiw`` by the last
+    # iteration of the time loop, which made the duration filter depend on the
+    # stratification of a single time step.
+    tbsiw_ref = np.nanmedian(tbsiw_series)
+
     wedu, wedi, fdura, fdire, dura, dire = mod.weddFilters(
-    wedd=wedd,
-    ver_wind=ver_wind,
-    ver_dire=ver_dire,
-    dt=dt,
-    tbsiw=tbsiw,
-    dw_hom=dw_hom,
-    v1mode=period_time[:,0]*3600,  # Fundamental wave period (seconds)
-    lin=lin
+        wedd=wedd,
+        ver_wind=ver_wind,
+        ver_dire=ver_dire,
+        dt=dt,
+        tbsiw=tbsiw_ref,
+        dw_hom=dw_hom,
+        v1mode=period_time[:, 0] * 3600,   # fundamental wave period (s)
+        lin=lin
     )
 
 
@@ -1007,6 +1134,14 @@ def main():
     conf = []
     iso_corrected = np.zeros(4, float)
 
+    # Band-pass amplitude of the isotherms.  These three names are consumed
+    # unconditionally by the classification figures further down, but were only
+    # created inside the "isotherms enabled" branch, so disabling the isotherm
+    # analysis raised a NameError at the end of a complete run.
+    banda = [0.0, 0.0, 0.0, 0.0]
+    amax = np.nan
+    aind = np.array([])
+
     if (turn_iso == 1):
         ean_norm = ean - np.mean(ean)
         for i in range(4):
@@ -1049,9 +1184,20 @@ def main():
                 wr.append(0)
                 conf.append([0])
 
-        banda = [np.nanmax(np.abs(band[i])) if band[i] is not None and not (isinstance(band[i], int) and band[i] == 0) else 0 for i in range(4)]
+        banda = [np.nanmax(np.abs(band[i]))
+                 if band[i] is not None
+                 and not (isinstance(band[i], int) and band[i] == 0)
+                 else 0 for i in range(4)]
         amax = max(np.array(banda))
         aind = tau[np.where(banda == amax)]
+
+    if not np.isfinite(amax) or amax <= 0:
+        # No isotherm amplitude is available (isotherm analysis disabled, or
+        # every isotherm outside the measured range).  The classification
+        # figures fall back to the mean epilimnion thickness so that a run
+        # without isotherms still completes.
+        amax = np.nanmean(np.abs(iso_corrected)) if np.any(iso_corrected) \
+            else np.nan
 
     # Spectral analysis of solar radiation (if available)
     if rad == 1:
@@ -1062,24 +1208,32 @@ def main():
             wl_aper_sol, welch_sol, wr_sol, conf_sol = 0, 0, 0, 0
             war.spectral(dig, 'radiation')
 
+    # Elapsed time of the analysis grid, in hours.  It is defined here rather
+    # than being taken from the wavelet routine, so that a failure of the
+    # spectral analysis can no longer leave the time axis of every time-series
+    # figure and text file set to the scalar 0.
+    time_win = np.arange(lin, dtype=float) * dt
+
     # Spectral analysis of wind intensity
     try:
-        time_win, per_win, power_win = mod.wave_spectral(iw, dt, mother)
+        _, per_win, power_win = mod.wave_spectral(iw, dt, mother)
         _, wl_aper_win, welch_win, wr_win, conf_win = mod.welch_method(iw, windsizeuser, window, dt)
     except Exception:
-        time_win, per_win, power_win = 0, 0, 0
+        per_win, power_win = 0, 0
         wl_aper_win, welch_win, wr_win, conf_win = 0, 0, 0, 0
         war.spectral(dig, 'wind')
 
+    # Sensor depths.  These are needed by the thermal-variation figure and by
+    # the dashboard even when the sensor analysis is switched off, so they are
+    # built unconditionally; version 1.x created them only inside the
+    # "sensor analysis enabled" branch and then used them outside it.
+    # ``seu`` indexes the columns of the input file, so the depth of a selected
+    # sensor must be read from the file-order height matrix.
+    depth = [mod.depths(seu[i], h_sensor, lin) for i in range(4)]
+    s_filtered = [None, None, None, None]
+
     # Coherence (isotherms and meteorological data)
     if turn_temp == 1:
-        
-        # Compute depths only once for each selected sensor index
-        d1 = mod.depths(seu[0], h, lin)
-        d2 = mod.depths(seu[1], h, lin)
-        d3 = mod.depths(seu[2], h, lin)
-        d4 = mod.depths(seu[3], h, lin)
-        depth = [d1, d2, d3, d4]
 
         s_filtered = []
         phws = []
@@ -1150,8 +1304,10 @@ def main():
                         friso.append(None)
                         cliso.append(None)
 
-    # Contourf correction and mean temperature at thermocline depth
-    templ, hl = graph.correction_contourf(h, temp, dj, lin, dci, qt)
+    # Contourf correction and mean temperature at thermocline depth.
+    # The profile field must be the depth-sorted one, so that every column of
+    # the temperature matrix corresponds to the height in the same column of h.
+    templ, hl = graph.correction_contourf(h, tempa, dj, lin, dci, qt)
     riwl, hlm = graph.correction_contourf(hzmid, riw2d, dj, lin, dci, qt - 1)
     buoy, hlm = graph.correction_contourf(hzmid, buoy, dj, lin, dci, qt - 1)
 
@@ -1162,7 +1318,7 @@ def main():
  
     # Thorpe scales
     thermo_temp = templ[:, ithermo]
-    tho, Lt = mod.thorpe_scale(temp, h)
+    tho, Lt = mod.thorpe_scale(tempa, h)
 
 
     # Spectral analysis of temperature at thermocline depth 
@@ -1296,7 +1452,6 @@ def main():
                 r += 1
     
 
-    time_win = np.asarray(time_win)
     riwl     = np.asarray(riwl)
     riwl_to_save = np.column_stack([time_win, riwl])
     
@@ -1370,6 +1525,97 @@ def main():
          'time(hour)\tV1H1 (h)\tV2H1 (h)\tV3H1 (h)\tV4H1 (h)\tV5H1 (h)',
          '%0.3f %0.2f %0.2f %0.2f %0.2f %0.2f')
     ])
+
+    # ------------------ Outputs introduced in version 2.260810 ---------------
+    save_tasks.extend([
+        (os.path.join(text_dir, 'energetics.txt'),
+         np.column_stack((time_win, heat_content, ape, ape_areal,
+                          wind_power, wind_energy)),
+         'time(hour)\theat content(J/m2)\tAPE(J)\tAPE(J/m2)\t'
+         'wind power(W)\tcumulative wind energy(J)',
+         '%0.3f %0.6e %0.6e %0.6e %0.6e %0.6e'),
+
+        (os.path.join(text_dir, 'wind_forcing.txt'),
+         np.column_stack((time_win, wind, iw, iw_tau, strs, wast, dw)),
+         'time(hour)\tspeed at sensor(m/s)\tU10 mean(m/s)\t'
+         'U10 stress-equivalent(m/s)\tstress(N/m2)\tu* water(m/s)\t'
+         'direction(deg)',
+         '%0.3f %0.4f %0.4f %0.4f %0.6f %0.6f %0.1f'),
+
+        (os.path.join(text_dir, 'reference_profile.txt'),
+         np.column_stack((energetics['depth_grid'], energetics['rho_ref'])),
+         'depth below surface(m)\treference density(kg/m3)',
+         '%0.3f %0.6f'),
+
+        (os.path.join(text_dir, 'hypsography.txt'),
+         np.column_stack((hypso.depth, hypso.area)),
+         'depth below surface(m)\tarea(m2)',
+         '%0.3f %0.6e'),
+
+        (os.path.join(text_dir, 'merian_period.txt'),
+         np.column_stack((time_win, tbsiw_series / 3600.0)),
+         'time(hour)\tMerian two-layer period(h)',
+         '%0.3f %0.4f'),
+
+        (os.path.join(text_dir, 'basin_slopes.txt'),
+         np.column_stack((time_win, wave_slope, longLeft, longRight,
+                          atLeft, atRight, transLeft, transRight,
+                          atcrossLeft, atcrossRight)),
+         'time(hour)\twave slope(deg)\tlong left(deg)\tlong right(deg)\t'
+         'alpha long left(-)\talpha long right(-)\ttrans left(deg)\t'
+         'trans right(deg)\talpha trans left(-)\talpha trans right(-)',
+         '%0.3f %0.4f %0.4f %0.4f %0.4f %0.4f %0.4f %0.4f %0.4f %0.4f'),
+    ])
+
+    # ---- data quality and time-base report ----------------------------------
+    quality_path = os.path.join(text_dir, 'data_quality.txt')
+    try:
+        with open(quality_path, 'w', encoding='utf-8') as fq:
+            fq.write("Interwave Analyzer - input data and time base\n")
+            fq.write("=" * 70 + "\n\n")
+            fq.write(f"basin                        : {nameBasin}\n")
+            fq.write(f"analysis start               : {dx[0]}\n")
+            fq.write(f"analysis end                 : {dx[-1]}\n")
+            fq.write(f"analysis records             : {lin}\n")
+            fq.write(f"analysis time step           : "
+                     f"{quality['dt_analysis'] / 60.0:.2f} min\n")
+            fq.write(f"temperature record step      : "
+                     f"{quality['dt_temperature'] / 60.0:.2f} min\n")
+            fq.write(f"meteorological record step   : "
+                     f"{quality['dt_meteorology'] / 60.0:.2f} min\n")
+            fq.write(f"temperature resampled        : "
+                     f"{'yes' if quality['resampled'] else 'no'}\n")
+            fq.write(f"wind combination operator    : "
+                     f"{quality['wind_mode']}\n")
+            fq.write(f"surface drag law             : {mod.DRAG_LAW}\n\n")
+
+            fq.write(f"number of sensors            : "
+                     f"{quality['n_sensors']}\n")
+            total = max(1, quality['n_times'] * quality['n_sensors'])
+            fq.write(f"missing temperature samples  : "
+                     f"{quality['temperature_missing']} "
+                     f"({100.0 * quality['temperature_missing'] / total:.2f} %)\n")
+            fq.write(f"missing wind samples         : "
+                     f"{quality['wind_missing']} "
+                     f"({100.0 * quality['wind_missing'] / max(1, lin):.2f} %)\n")
+            fq.write(f"missing direction samples    : "
+                     f"{quality['direction_missing']} "
+                     f"({100.0 * quality['direction_missing'] / max(1, lin):.2f} %)\n\n")
+
+            fq.write("basin geometry\n")
+            fq.write("-" * 70 + "\n")
+            fq.write(f"configuration                : type {type_length}\n")
+            fq.write(f"surface area                 : {hypso.A0:.6e} m2\n")
+            fq.write(f"volume                       : {hypso.volume:.6e} m3\n")
+            fq.write(f"centre of volume             : {hypso.Zcv:.3f} m\n")
+            fq.write(f"mean fetch                   : {m_ls:.1f} m\n\n")
+
+            fq.write("loader diagnostics\n")
+            fq.write("-" * 70 + "\n")
+            for message in dataset['messages']:
+                fq.write(f"  {message}\n")
+    except Exception as error:
+        dig.write(f"[WARN] Failed to save data_quality.txt: {error}\n")
 
     graph.save_mode_timeseries(time_model, hemod, mode2_nodes, mode3_nodes,
     mode4_nodes, mode1Layer, mode2Layer, mode3Layer, mode4Layer, text_dir, 
@@ -2024,6 +2270,47 @@ def main():
     fig.tight_layout()
     save_fig_safe(os.path.join(output_path, "mode_period.png"),dpi=depi)
 
+    # ------------------- Basin energetics (new in 2.260810) ------------------
+    fig = plt.figure(figsize=(10, 6))
+    gs = gridspec.GridSpec(2, 1, figure=fig)
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[1, 0], sharex=ax1)
+
+    ax1.set_title('a)', loc='left')
+    ax2.set_title('b)', loc='left')
+
+    graph.energetics(dx, heat_content, schmidt, ax1)
+    graph.energy_budget(dx, ape, wind_energy, ax2)
+
+    plt.setp(ax1.get_xticklabels(), visible=False)
+    fig.tight_layout()
+    save_fig_safe(os.path.join(output_path, 'energetics.png'), dpi=depi)
+
+    # -------------------- Basin hypsography ----------------------------------
+    fig = plt.figure(figsize=(10, 4))
+    gs = gridspec.GridSpec(1, 2, figure=fig)
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[0, 1])
+
+    ax1.set_title('a)', loc='left')
+    ax2.set_title('b)', loc='left')
+
+    graph.hypsography(hypso, longData, transData, ax1)
+    graph.fetch_rose(dw, ls_fetch, ax2)
+
+    fig.tight_layout()
+    save_fig_safe(os.path.join(output_path, 'basin_geometry.png'), dpi=depi)
+
+    # -------------------- Input data coverage --------------------------------
+    fig = plt.figure(figsize=(10, 4))
+    gs = gridspec.GridSpec(1, 1, figure=fig)
+    ax1 = fig.add_subplot(gs[0, 0])
+
+    graph.data_coverage(dx, temp, wind, dw, ean, ax1)
+
+    fig.tight_layout()
+    save_fig_safe(os.path.join(output_path, 'data_coverage.png'), dpi=depi)
+
     
     # ----------- Decomposition velocity in arbitrary units -------------------
     try:
@@ -2181,13 +2468,35 @@ def main():
         wave_slope   = wave_slope,
         longLeft     = longLeft,
         longRight    = longRight,
-        transLeft    = transRight,
+        transLeft    = transLeft,      # was mistakenly set to transRight
         transRight   = transRight,
         atLeft       = atLeft,
         atRight      = atRight,
         atcrossLeft  = atcrossLeft,
-        atcrossRight = atcrossRight
-         
+        atcrossRight = atcrossRight,
+
+        # Basin energetics and data quality (new in 2.260810)
+        heat_content = heat_content,
+        ape          = ape,
+        ape_areal    = ape_areal,
+        wind_power   = wind_power,
+        wind_energy  = wind_energy,
+        iw_tau       = iw_tau,
+        strs         = strs,
+        tbsiw        = tbsiw_series,
+
+        hypso_depth  = hypso.depth,
+        hypso_area   = hypso.area,
+        basin_area   = hypso.A0,
+        basin_volume = hypso.volume,
+        basin_zcv    = hypso.Zcv,
+
+        dt_analysis  = quality['dt_analysis'],
+        dt_meteo     = quality['dt_meteorology'],
+        wind_mode    = quality['wind_mode'],
+        drag_law     = mod.DRAG_LAW,
+        n_missing_temp = quality['temperature_missing'],
+        n_missing_wind = quality['wind_missing'],
     )
 
 

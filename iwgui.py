@@ -1067,12 +1067,52 @@ def save_settings(temporary):
         else:
             data.write("-999\n")  
 
+def report_error(exc):
+    """
+    Show a failure instead of disappearing.
+
+    PyQt5 aborts the process through qFatal() when an exception escapes a slot,
+    and a frozen build has no console to print the traceback to, so an ordinary
+    Python error would close the whole program without a word. Catching it here
+    keeps the window alive, puts the traceback on screen and leaves a copy on
+    disk next to the executable.
+    """
+    import traceback
+
+    details = "".join(
+        traceback.format_exception(type(exc), exc, exc.__traceback__))
+
+    if getattr(sys, 'frozen', False):
+        log_dir = os.path.dirname(sys.executable)
+    else:
+        log_dir = os.path.dirname(os.path.abspath(__file__))
+    log_path = os.path.join(log_dir, "interwave_error.log")
+
+    try:
+        with open(log_path, "w", encoding="utf-8") as fh:
+            fh.write(details)
+        saved = f"\n\nA copy was saved to:\n{log_path}"
+    except Exception:
+        saved = ""
+
+    box = QMessageBox(window)
+    box.setIcon(QMessageBox.Critical)
+    box.setWindowTitle("Interwave Analyzer - error")
+    box.setText(f"The analysis stopped because of an error:\n\n"
+                f"{type(exc).__name__}: {exc}{saved}")
+    box.setDetailedText(details)
+    box.exec_() if hasattr(box, "exec_") else box.exec()
+
+
 def export_data():
     import iwback as iwm
     print("Temporary file being created...")
-    save_settings('temporary') 
+    save_settings('temporary')
     print("Temporary file saved. Running backend...")
-    iwm.main()
+    try:
+        iwm.main()
+    except Exception as exc:
+        report_error(exc)
 
 run_button.clicked.connect(export_data)
 
